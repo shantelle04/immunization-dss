@@ -1,0 +1,53 @@
+@startuml F-SQ1_forecast_and_alert
+' F-SQ1 Sequence: generating a vaccine demand forecast and stock-out alert (proposal 3.4 item 3.1).
+' Requirements: FR-11, FR-12, FR-13, FR-16, NFR-02, NFR-11. Use cases: UC-08, UC-05.
+!include style.iuml
+autonumber
+
+actor "Scheduler\n(cron)" as CRON
+participant "run_forecasts\n<<management command>>" as CMD
+participant "ForecastService" as FS
+participant "immdss_analytics\n(forecast package)" as PKG
+participant "InventoryService" as INV
+database "PostgreSQL" as DB
+actor "Healthcare worker" as HCW
+participant "React app" as UI
+participant "DRF API\n(JWT, facility scope)" as API
+
+== Nightly forecast run (UC-08) ==
+CRON -> CMD : run at 02:00
+CMD -> FS : run_forecasts(today)
+FS -> DB : weekly issues per facility and antigen\n(StockTransaction kind = issue)
+DB --> FS : weekly series
+FS -> PKG : select model per series (D-21) and forecast 4 weeks
+note right of PKG
+  Models see administered doses only,
+  never truth/ demand (doc 10 section 2).
+end note
+PKG --> FS : yhat, lo80, hi80, model per week
+FS -> DB : insert ForecastRun (git SHA, data hash, params)\nand Forecast rows
+FS -> INV : evaluate_alerts(run)
+loop each facility and antigen
+  INV -> DB : current balance (stock_balance view),\nStockPolicy, scheduled receipts
+  INV -> INV : projected stock_k = balance + receipts\n- cumulative hi80 demand to week k
+  INV -> INV : safety minimum (BR-05)
+  alt projected stock < safety minimum before next replenishment
+    INV -> DB : insert StockAlert (status open)
+  end
+end
+FS --> CMD : run summary
+CMD -> DB : AuditLog (system action)
+
+== Health worker opens the inventory dashboard (UC-05) ==
+HCW -> UI : open Inventory
+UI -> API : GET /api/v1/stock/balance, /forecasts, /alerts\n(Authorization: Bearer access token)
+API -> API : authenticate, role check, facility scope\n(reject before any query on failure)
+alt authorised
+  API -> DB : queries filtered by user's facility
+  DB --> API : balances, forecasts, open alerts
+  API --> UI : 200 JSON
+  UI --> HCW : stock table, forecast chart with interval\nand table view, alert banner
+else token missing, expired or wrong facility
+  API --> UI : 401 or 403, no data
+end
+@enduml

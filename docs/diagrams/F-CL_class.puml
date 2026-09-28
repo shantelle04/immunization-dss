@@ -1,0 +1,237 @@
+@startuml F-CL_class
+' F-CL Class diagram (design). Entities become Django models; <<service>> classes hold the business logic
+' (services.py, doc 10 section 4). Attribute types are Python/Django types; the physical schema is F-LDS.
+!include style.iuml
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+skinparam nodesep 40
+skinparam ranksep 50
+
+package "facilities" {
+  class Facility {
+    code : str {unique}
+    name : str
+    keph_level : KephLevel
+    ownership : str
+    county : str
+    sub_county : str
+    is_synthetic : bool
+  }
+  enum KephLevel {
+    dispensary
+    health_centre
+    sub_county_hospital
+  }
+}
+
+package "accounts" {
+  class User {
+    username : str {unique}
+    role : Role
+    is_active : bool
+    failed_logins : int
+    locked_until : datetime
+    +can_access(facility) : bool
+  }
+  enum Role {
+    healthcare_worker
+    facility_manager
+    system_admin
+  }
+  class AuditLog {
+    at : datetime
+    action : str
+    entity : str
+    entity_id : str
+    cross_facility : bool
+  }
+}
+
+package "passport" {
+  class Antigen {
+    code : str {unique}
+    name : str
+    doses_per_vial : int
+    open_vial_policy : bool
+  }
+  class ScheduleDose {
+    dose_code : str {unique}
+    dose_number : int
+    contact : str
+    recommended_age_days : int
+    min_age_days : int
+    max_age_days : int
+    min_interval_days : int
+  }
+  class Child {
+    id : UUID
+    system_id : str {unique}
+    given_name : str
+    family_name : str
+    sex : str
+    date_of_birth : date
+    caregiver_name : str
+    registered_on : date
+    is_synthetic : bool
+    +age_in_days(on : date) : int
+  }
+  class ImmunizationEvent {
+    given_on : date
+    is_synthetic : bool
+  }
+  class DoseStatus <<value>> {
+    dose : ScheduleDose
+    state : given | due | overdue | closed | not_yet
+    due_date : date
+    days_overdue : int
+  }
+  class PassportService <<service>> {
+    +register(data, user) : Child
+    +record_dose(child, dose, on, lot, user) : ImmunizationEvent
+    +search(system_id | name + dob, user) : Child[]
+    +dose_statuses(child, on) : DoseStatus[]
+    +fhir_bundle(child) : dict
+  }
+}
+
+package "inventory" {
+  class VaccineLot {
+    lot_number : str {unique}
+    first_received : date
+    expiry : date
+  }
+  class StockTransaction {
+    kind : TxKind
+    quantity_doses : int
+    occurred_on : date
+    is_synthetic : bool
+  }
+  enum TxKind {
+    opening_balance
+    receipt
+    issue
+    wastage
+    loss
+    adjustment
+  }
+  class StockPolicy {
+    cycle_weeks : int
+    safety_buffer : float
+  }
+  class ForecastRun {
+    run_at : datetime
+    git_sha : str
+    data_sha256 : str
+    params : json
+    metrics : json
+  }
+  class Forecast {
+    week_start : date
+    horizon_week : int
+    yhat : float
+    lo80 : float
+    hi80 : float
+    model : str
+  }
+  class StockAlert {
+    raised_on : date
+    projected_breach_week : date
+    projected_doses : float
+    safety_minimum : float
+    status : open | acknowledged | resolved
+  }
+  class InventoryService <<service>> {
+    +record(tx, user) : StockTransaction
+    +balance(facility, antigen, on) : int
+    +safety_minimum(facility, antigen) : float
+    +evaluate_alerts(run) : StockAlert[]
+  }
+  class ForecastService <<service>> {
+    +run_forecasts(on : date) : ForecastRun
+  }
+}
+
+package "scheduling" {
+  class OutreachSession {
+    date : date
+    kind : fixed | outreach
+    location_name : str
+    capacity : int
+    status : planned | held
+  }
+  class SessionPlanItem {
+    priority_rank : int
+  }
+  class SessionAttendance {
+    attended : bool
+  }
+  class Defaulter <<value>> {
+    child : Child
+    overdue : DoseStatus[]
+    days_to_nearest_max_age : int
+  }
+  class SchedulingService <<service>> {
+    +defaulters(facility, on) : Defaulter[]
+    +rank(defaulters) : Defaulter[]
+    +plan(session, user) : SessionPlanItem[]
+    +shortfalls(session) : dict
+  }
+}
+
+package "analytics_api" {
+  class ImportBatch {
+    kind : immunizations | stock
+    dry_run : bool
+    rows_total : int
+    rows_rejected : int
+    uploaded_at : datetime
+  }
+  class ImportRowError {
+    row_index : int
+    defect_code : str
+    message : str
+  }
+}
+
+Facility "1" -- "0..*" User : employs >
+User "1" -- "0..*" AuditLog : acts >
+Antigen "1" -- "1..*" ScheduleDose
+Facility "1" -- "0..*" Child : registers >
+Child "1" *-- "0..*" ImmunizationEvent
+ScheduleDose "1" -- "0..*" ImmunizationEvent : fulfils <
+Antigen "1" -- "0..*" VaccineLot
+VaccineLot "0..1" -- "0..*" ImmunizationEvent
+VaccineLot "0..1" -- "0..*" StockTransaction
+Antigen "1" -- "0..*" StockPolicy
+ForecastRun "1" *-- "0..*" Forecast
+ForecastRun "1" -- "0..*" StockAlert
+OutreachSession "1" *-- "0..*" SessionPlanItem
+SessionPlanItem "0..*" -- "1" Child
+SessionPlanItem "0..*" -- "1" ScheduleDose
+OutreachSession "1" *-- "0..*" SessionAttendance
+SessionAttendance "0..*" -- "1" Child
+OutreachSession "0..1" -- "0..*" ImmunizationEvent
+ImportBatch "1" *-- "0..*" ImportRowError
+
+' Layout only: stack the app packages vertically so the page is portrait.
+SchedulingService -[hidden]down- Antigen
+PassportService -[hidden]down- VaccineLot
+DoseStatus -[hidden]down- ForecastService
+AuditLog -[hidden]down- ImportBatch
+Role -[hidden]down- ImportRowError
+
+note as N1
+  <b>Facility-scoped classes</b> (each has a Facility
+  reference, omitted as lines for readability; see F-ERD):
+  ImmunizationEvent (given at), StockTransaction,
+  StockPolicy, Forecast, StockAlert, OutreachSession,
+  ImportBatch, AuditLog. Every query is filtered by the
+  user's facility (FacilityScopedQuerysetMixin), except
+  PassportService.search (BR-08).
+end note
+
+SchedulingService ..> PassportService : uses dose_statuses
+SchedulingService ..> InventoryService : uses balance, Forecast
+ForecastService ..> InventoryService : evaluate_alerts
+PassportService ..> InventoryService : issue on record_dose
+@enduml

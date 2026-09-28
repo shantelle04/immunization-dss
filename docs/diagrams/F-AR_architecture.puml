@@ -1,0 +1,56 @@
+@startuml F-AR_architecture
+' F-AR System architecture: three tiers (proposal 3.4 item 5, 3.8.4) with the deployment used for
+' development and the demo. Decisions: D-10 (read cache), D-13 (cron), D-20 (Docker PostgreSQL).
+!include style.iuml
+skinparam componentStyle rectangle
+
+node "Browser (desktop, laptop, tablet)" as browser {
+  component "React 18 + TypeScript app\n(Vite build)" as spa
+  component "Service worker\nread-only cache (D-10)" as sw
+  note bottom of spa
+    Access token in memory only;
+    refresh token in HttpOnly,
+    Secure, SameSite cookie.
+  end note
+}
+
+node "Application server" as app {
+  component "Django 5.2 + DRF\nREST API /api/v1" as api {
+    component "accounts" as a1
+    component "facilities" as a2
+    component "passport" as a3
+    component "inventory" as a4
+    component "scheduling" as a5
+    component "analytics_api" as a6
+  }
+  component "Security layer\nJWT auth, role and facility\npermissions, throttling,\nlockout, headers, CSRF" as sec
+  component "run_forecasts\nmanagement command" as cmd
+  component "load_synthetic\nmanagement command" as loader
+  component "cron" as cron
+}
+
+node "Analytics package" as pkg {
+  component "immdss_analytics\n(no Django imports)" as ana
+  folder "models/\ntrained artefacts" as models
+}
+
+node "Docker: PostgreSQL 16\n127.0.0.1:5433 (D-20)" as dbnode {
+  database "immdss database\napp role / test role" as db
+}
+
+folder "data/synthetic/<run>/app/\n(validated run)" as appdata
+folder "truth/\nevaluation only" as truth
+
+spa --> sec : HTTPS, JSON\nBearer access token
+sw ..> spa : cached dashboards\nwhen offline
+sec --> api
+api --> db : Django ORM\n(no raw SQL)
+cron --> cmd : nightly
+cmd --> ana : narrow interface:\nseries in, forecasts out
+ana --> models
+cmd --> db : ForecastRun, Forecast,\nStockAlert
+loader --> appdata : reads app/ only
+loader --> db
+truth .[#e34948].> loader : never loaded
+ana ..> truth : backtests and\nevaluation only
+@enduml

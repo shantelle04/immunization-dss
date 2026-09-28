@@ -1,0 +1,25 @@
+#!/bin/sh
+# Only push to the GitHub account in `git config --local guard.githubOwner`, over SSH, and never push
+# tracked files that match an ignore rule or contain machine-specific paths.
+owner="$(git config --local --get guard.githubOwner)"
+remote_url="$2"
+if [ -z "$owner" ]; then
+  echo "pre-push: guard.githubOwner is not set; refusing to push (see docs/08 section 2)" >&2
+  exit 1
+fi
+case "$remote_url" in
+  "git@github.com:$owner/"*|"ssh://git@github.com/$owner/"*) ;;
+  *) echo "pre-push: refusing to push to '$remote_url' (only $owner over SSH is allowed)" >&2; exit 1 ;;
+esac
+tracked_ignored="$(git ls-files -ci --exclude-standard)"
+if [ -n "$tracked_ignored" ]; then
+  echo "pre-push: tracked files match ignore rules; untrack them first:" >&2
+  echo "$tracked_ignored" >&2
+  exit 1
+fi
+if git grep -I -q -E '/home/[a-z0-9_.-]+/|/Users/[A-Za-z0-9_.-]+/|[A-Za-z]:\\Users\\|file:/{3}' HEAD -- 2>/dev/null; then
+  echo "pre-push: committed files contain machine-specific paths:" >&2
+  git grep -I -l -E '/home/[a-z0-9_.-]+/|/Users/[A-Za-z0-9_.-]+/|[A-Za-z]:\\Users\\|file:/{3}' HEAD -- >&2
+  exit 1
+fi
+exit 0

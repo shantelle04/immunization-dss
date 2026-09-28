@@ -1,0 +1,54 @@
+@startuml F-SQ3_register_and_retrieve
+' F-SQ3 Sequence: registering a new child and retrieving their immunization history, including from
+' another facility (proposal 3.4 item 3.3). Requirements: FR-30, FR-32, FR-33, FR-34, FR-41, BR-08.
+!include style.iuml
+autonumber
+
+actor "Health worker\nfacility A" as HA
+actor "Health worker\nfacility B" as HB
+participant "React app" as UI
+participant "DRF API\n(JWT, facility scope)" as API
+participant "PassportService" as PP
+database "PostgreSQL" as DB
+
+== Register (UC-12), facility A ==
+HA -> UI : fill registration form
+UI -> API : POST /api/v1/children
+API -> API : authenticate, role, facility A scope
+API -> PP : register(data, user)
+PP -> PP : validate (names, sex, date of birth not in the future)
+PP -> DB : possible duplicate? (family name + date of birth at facility)
+alt likely duplicate
+  PP --> API : 409 with candidate system IDs
+  API --> UI : show existing records
+else new child
+  PP -> DB : insert Child (system ID generated, facility A)
+  PP -> DB : AuditLog (create)
+  PP --> API : child
+  API --> UI : 201 with system ID
+end
+
+== Retrieve at another facility (UC-13, UC-15), facility B ==
+HB -> UI : search by system ID (or name + date of birth)
+UI -> API : GET /api/v1/children/search?system_id=...
+API -> API : authenticate, role (HCW or FM)
+API -> PP : search(system_id, user)
+PP -> DB : exact match across facilities (BR-08)
+PP -> DB : AuditLog (read, cross_facility = true)
+PP --> API : child summary (read-only for facility B)
+API --> UI : 200
+HB -> UI : open history
+UI -> API : GET /api/v1/children/{id}/immunizations
+API -> PP : dose_statuses(child, today) and events
+PP -> DB : events and ScheduleDose
+PP --> API : history and next due doses (FR-33)
+API --> UI : 200
+UI --> HB : history table and next due doses
+opt export (UC-16)
+  HB -> UI : export FHIR
+  UI -> API : GET /api/v1/children/{id}/fhir
+  API -> PP : fhir_bundle(child)
+  PP --> API : Bundle (Patient + Immunization)
+  API --> UI : 200 application/fhir+json
+end
+@enduml

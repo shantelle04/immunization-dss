@@ -1,0 +1,55 @@
+@startuml F-AC_session_activity
+' F-AC Activity: a health worker's workflow during a typical immunization session across the three
+' modules (proposal 3.4 item 4). Requirements: FR-11, FR-13, FR-24, FR-30 to FR-33, BR-01 to BR-07.
+!include style.iuml
+
+|Health worker|
+start
+:Log in (UC-01);
+:Open today's session plan (M2);
+note right: Planned children, doses and\nvaccines to carry (F-SQ2)
+fork
+  :Check stock of planned vaccines (M1);
+  if (Shortfall flagged?) then (yes)
+    :Inform facility manager;
+  else (no)
+  endif
+fork again
+  :Prepare cold box and vials;
+end fork
+
+repeat :Next child arrives;
+  :Search child record by system ID\nor name + date of birth (M3);
+  if (Found?) then (no)
+    :Register child (M3, FR-30);
+  else (yes)
+  endif
+  :View history and due doses (M3, FR-33);
+  if (Any dose due and allowed?\n(min age, interval, max age)) then (yes)
+    repeat :Next due dose;
+      if (Vaccine in stock?) then (yes)
+        :Administer dose;
+        :Record immunization (M3, FR-31);
+        |System|
+        :Record stock issue (M1, automatic);
+        :Update child's due doses;
+        |Health worker|
+      else (no)
+        :Record child turned away\nand advise return date;
+      endif
+    repeat while (More due doses?) is (yes)
+    -> no;
+  else (no)
+    :Advise next visit date;
+  endif
+  :Mark attendance (M2, FR-24);
+repeat while (More children?) is (yes)
+-> no;
+
+:Discard opened vials without\nopen-vial policy (BR-07);
+:Record wastage (M1, FR-10);
+:Close session (status held);
+|System|
+:Defaulter list and stock projection\nreflect the session (M2, M1);
+stop
+@enduml

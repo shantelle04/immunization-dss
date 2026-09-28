@@ -1,0 +1,47 @@
+@startuml F-SQ2_defaulters_and_session_plan
+' F-SQ2 Sequence: generating a defaulter list and outreach session plan (proposal 3.4 item 3.2).
+' Requirements: FR-20 to FR-23, BR-01 to BR-04. Use cases: UC-09, UC-10.
+!include style.iuml
+autonumber
+
+actor "Facility manager" as FM
+participant "React app" as UI
+participant "DRF API\n(JWT, facility scope)" as API
+participant "SchedulingService" as SCH
+participant "PassportService" as PP
+participant "InventoryService" as INV
+database "PostgreSQL" as DB
+
+== Defaulter list (UC-09) ==
+FM -> UI : open Scheduling
+UI -> API : GET /api/v1/defaulters?on=today
+API -> API : authenticate, role, facility scope
+API -> SCH : defaulters(facility, today)
+SCH -> DB : children of facility, their events, ScheduleDose
+DB --> SCH : rows
+loop each child
+  SCH -> PP : dose_statuses(child, today)
+  PP --> SCH : given | due | overdue | closed per dose\n(BR-01 min age and interval, BR-02 grace 28 days, BR-03 max age)
+end
+SCH -> SCH : keep children with >= 1 overdue dose (FR-21)
+SCH -> SCH : rank (BR-04): overdue count desc,\ndays to nearest max age asc, system ID
+SCH --> API : ranked defaulters
+API --> UI : 200 JSON
+UI --> FM : prioritised defaulter list
+
+== Session plan (UC-10) ==
+FM -> UI : create outreach session (date, location, capacity)
+UI -> API : POST /api/v1/sessions
+API -> DB : insert OutreachSession (status planned)
+UI -> API : POST /api/v1/sessions/{id}/plan
+API -> SCH : plan(session, user)
+SCH -> SCH : take ranked defaulters up to capacity
+SCH -> DB : insert SessionPlanItem (child, dose, rank)
+SCH -> INV : balance and latest Forecast per antigen
+INV --> SCH : doses available by session date
+SCH -> SCH : shortfalls = doses needed - doses available (FR-23)
+SCH -> DB : AuditLog (create plan)
+SCH --> API : plan items, doses needed per antigen, shortfalls
+API --> UI : 201 JSON
+UI --> FM : session plan with vaccines to carry\nand shortfall warnings
+@enduml

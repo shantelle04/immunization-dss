@@ -1,0 +1,6 @@
+# Regenerable or machine-specific; everything else in the notes repository is versioned.
+__pycache__/
+*.py[cod]
+*.tgz
+.env
+.env.*

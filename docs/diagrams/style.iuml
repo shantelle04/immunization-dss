@@ -1,0 +1,28 @@
+' Shared style: plain, print-friendly, colour-blind safe (reference palette slot 1 blue for accents).
+skinparam shadowing false
+skinparam defaultFontName "DejaVu Sans"
+skinparam defaultFontSize 12
+skinparam backgroundColor white
+skinparam ArrowColor #52514e
+skinparam ArrowThickness 1
+skinparam packageStyle rectangle
+skinparam roundCorner 6
+skinparam ActorBorderColor #2a78d6
+skinparam UsecaseBorderColor #2a78d6
+skinparam UsecaseBackgroundColor #f3f7fd
+skinparam ClassBorderColor #2a78d6
+skinparam ClassBackgroundColor #ffffff
+skinparam ClassHeaderBackgroundColor #f3f7fd
+skinparam ParticipantBorderColor #2a78d6
+skinparam ParticipantBackgroundColor #f3f7fd
+skinparam DatabaseBorderColor #2a78d6
+skinparam SequenceLifeLineBorderColor #8a8984
+skinparam ActivityBorderColor #2a78d6
+skinparam ActivityBackgroundColor #f3f7fd
+skinparam ComponentBorderColor #2a78d6
+skinparam NodeBorderColor #52514e
+skinparam EntityBorderColor #2a78d6
+skinparam EntityBackgroundColor #ffffff
+skinparam NoteBackgroundColor #fdf6e3
+skinparam NoteBorderColor #c9b98a
+hide circle

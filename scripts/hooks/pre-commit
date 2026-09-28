@@ -1,0 +1,23 @@
+#!/bin/sh
+# Refuse to commit files that match an ignore rule (including .git/info/exclude), even if force-added,
+# and files that contain machine-specific paths.
+staged="$(git diff --cached --name-only --diff-filter=ACMR)"
+[ -z "$staged" ] && exit 0
+
+ignored="$(printf '%s\n' "$staged" | git check-ignore --no-index --stdin)"
+if [ -n "$ignored" ]; then
+  echo "pre-commit: these paths are local-only (ignore rules) and cannot be committed:" >&2
+  echo "$ignored" >&2
+  exit 1
+fi
+
+pattern='/home/[a-z0-9_.-]+/|/Users/[A-Za-z0-9_.-]+/|[A-Za-z]:\\Users\\|file:/{3}'
+paths="$(printf '%s\n' "$staged" | while IFS= read -r f; do
+  git show ":$f" 2>/dev/null | grep -I -q -E "$pattern" && printf '%s\n' "$f"
+done)"
+if [ -n "$paths" ]; then
+  echo "pre-commit: these files contain machine-specific paths; use repository-relative paths:" >&2
+  echo "$paths" >&2
+  exit 1
+fi
+exit 0

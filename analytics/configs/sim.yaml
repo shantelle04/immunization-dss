@@ -1,0 +1,164 @@
+# Operations simulator configuration.
+# Every value is either PUBLISHED (with its source) or ASSUMPTION (a modelling choice to be
+# defended). Published figures: Kenya DHS 2022 Key Indicators Report (KNBS and ICF, 2023),
+# Table 11 "Vaccinations by background characteristics", national totals and subgroups.
+
+seed: 42
+start_date: 2021-01-04        # ASSUMPTION: first Monday of the stock ledger and the output window
+weeks: 260                    # ASSUMPTION: 5 years, so every series has well over 104 weeks for the GRU
+warmup_weeks: 104             # ASSUMPTION: children born before start_date, so all ages exist on day one
+as_of_date: 2025-12-29        # Reference date for validation and the "today" of the demo dataset
+
+county: Synthetic County      # Facilities and places are fictional on purpose
+facilities:
+  # ASSUMPTION: 12 facilities across the KEPH levels. births_per_week is the catchment birth rate.
+  - {code: SYN-D01, level: dispensary, ownership: public, residence: rural, births_per_week: 3.0}
+  - {code: SYN-D02, level: dispensary, ownership: public, residence: rural, births_per_week: 2.5}
+  - {code: SYN-D03, level: dispensary, ownership: faith_based, residence: rural, births_per_week: 3.5}
+  - {code: SYN-D04, level: dispensary, ownership: public, residence: urban, births_per_week: 4.0}
+  - {code: SYN-D05, level: dispensary, ownership: private, residence: urban, births_per_week: 2.0}
+  - {code: SYN-H01, level: health_centre, ownership: public, residence: rural, births_per_week: 8.0}
+  - {code: SYN-H02, level: health_centre, ownership: public, residence: urban, births_per_week: 10.0}
+  - {code: SYN-H03, level: health_centre, ownership: faith_based, residence: rural, births_per_week: 7.0}
+  - {code: SYN-H04, level: health_centre, ownership: public, residence: rural, births_per_week: 6.0}
+  - {code: SYN-S01, level: sub_county_hospital, ownership: public, residence: urban, births_per_week: 18.0}
+  - {code: SYN-S02, level: sub_county_hospital, ownership: public, residence: rural, births_per_week: 14.0}
+  - {code: SYN-S03, level: sub_county_hospital, ownership: public, residence: urban, births_per_week: 16.0}
+
+sessions:
+  # ASSUMPTION: static immunization days per week by level (0 = Monday) and monthly outreach sessions
+  fixed_days:
+    dispensary: [1, 3]
+    health_centre: [0, 1, 2, 3, 4]
+    sub_county_hospital: [0, 1, 2, 3, 4]
+  outreach_per_month:
+    dispensary: 1
+    health_centre: 2
+    sub_county_hospital: 1
+  far_share: {rural: 0.30, urban: 0.05}   # ASSUMPTION: share of children who attend outreach, not static sessions
+  outreach_window_days: 10                # ASSUMPTION: a "far" child uses an outreach session within this window
+  batching:
+    # ASSUMPTION (D-18): at smaller facilities, multi-dose vaccines discarded after the session (no open-vial
+    # policy) are given only on one static day per week, so a vial serves more children. A child who comes on
+    # another static day is asked to return on that day; outreach sessions give every due dose.
+    # D-23: BCG is also batched at sub-county hospitals (BCG wastage was 79% vs the WHO indicative 50%);
+    # MR is not, to avoid raising the Penta1 to MR1 dropout further.
+    levels_by_antigen:
+      BCG: [dispensary, health_centre, sub_county_hospital]
+      MR: [dispensary, health_centre]
+    weekday: 1                            # Tuesday: a static day at every batching level
+    return_probability: 0.8               # ASSUMPTION: share of deferred children who come back on that day
+
+population:
+  birth_growth_per_year: 0.02             # ASSUMPTION
+  birth_seasonal_amplitude: 0.05          # ASSUMPTION: mild sinusoidal seasonality in births
+  mobility_share: 0.05                    # ASSUMPTION: children who move to another facility once
+  # PUBLISHED: weighted "Number of children" column, KDHS 2022 Table 11 (children 12-23 months)
+  education: {none: 331, primary: 1235, secondary: 1148, higher: 565}
+  wealth: {lowest: 767, second: 620, middle: 572, fourth: 646, highest: 719}
+  birth_order: {"1": 1000, "2-3": 1320, "4-5": 642, "6+": 361}
+
+calibration:
+  # PUBLISHED: KDHS 2022 Table 11, total row, children 12-23 months (MR2: children 24-35 months)
+  targets:
+    zero_dose: 0.021
+    bcg: 0.969
+    opv0: 0.861
+    penta1: 0.971
+    penta2: 0.939
+    penta3: 0.892
+    opv1: 0.965
+    opv2: 0.942
+    opv3: 0.782
+    ipv: 0.874
+    pcv1: 0.965
+    pcv2: 0.954
+    pcv3: 0.912
+    rota1: 0.960
+    rota2: 0.923
+    mr1: 0.890
+    mr2: 0.668
+  # PUBLISHED: Penta3 coverage by subgroup, KDHS 2022 Table 11; converted to log-odds effects
+  penta3_by_group:
+    education: {none: 0.730, primary: 0.906, secondary: 0.906, higher: 0.926}
+    wealth: {lowest: 0.851, second: 0.923, middle: 0.888, fourth: 0.900, highest: 0.904}
+    birth_order: {"1": 0.920, "2-3": 0.890, "4-5": 0.889, "6+": 0.825}
+  effect_shrink: 0.8            # ASSUMPTION (D-19, was 0.6): factors are drawn independently, so marginal effects are shrunk
+  tolerance_pp: 3.0             # Validation passes when simulated coverage is within this many points
+  first_contact_at_birth: 0.90  # ASSUMPTION: share of vaccinated children whose first contact is the birth visit
+  cohort_size: 40000            # Calibration cohort (stock-unconstrained)
+  iterations: 20
+  damping: 0.5
+  engine_refinements: 8         # Second stage: maximum re-fits against the full engine (stock-outs, batching)
+  engine_target_pp: 1.5         # Stop re-fitting once every dose is within this many points (half the V-10 tolerance)
+  engine_damping: 0.6           # Damped re-fit steps; full steps oscillated (3.1, 3.3, 3.6, 2.4 pp in run cce5aedc)
+
+timeliness:
+  # ASSUMPTION: lognormal delay after the due date, median days per contact; risk and rainy season lengthen it
+  median_delay_days: {birth: 1, w6: 7, w10: 10, w14: 14, m9: 21, m18: 30}
+  sigma: 0.8
+  risk_delay_factor: 0.5
+  rainy_months: [3, 4, 5, 10, 11, 12]   # Long rains Mar to May, short rains Oct to Dec
+  rainy_delay_multiplier: 1.3
+
+stock:
+  cycle_weeks: 4                 # ASSUMPTION: monthly replenishment from the sub-county store
+  lead_time_weeks: [0, 1, 2]     # ASSUMPTION: uniform choice
+  max_stock_weeks: 6             # ASSUMPTION: order-up-to level in weeks of average consumption
+  min_stock_weeks: 2             # ASSUMPTION: emergency order trigger
+  emergency_fill_probability: 0.5
+  delivery_skip_probability: 0.04
+  delivery_partial_probability: 0.08
+  partial_fill_rate: 0.5
+  monthly_loss_rate: 0.003       # ASSUMPTION: expiry, breakage, cold chain loss of unopened stock
+  open_vial_discard_probability: 0.05  # ASSUMPTION (D-18): an open-vial-policy vial is discarded at the end of a session (contamination, VVM, cold chain)
+  return_after_stockout: 0.6     # ASSUMPTION: child sent away by a stock-out comes back within 1 to 3 weeks
+  disruptions:
+    # ASSUMPTION: supply disruptions that cut deliveries of one antigen across all facilities
+    - {antigen: OPV, start_week: 70, weeks: 8, fill_rate: 0.3}
+    - {antigen: MR, start_week: 180, weeks: 6, fill_rate: 0.2}
+
+antigens:
+  # Schedule: KDHS 2022 report section 3.10 (Kenya Expanded Programme on Immunization).
+  # Checked against Ministry of Health, Kenya, National Policy Guidelines on Immunization 2013 (pp. 23, 28, 30):
+  # BCG 20-dose and discard, MDVP for OPV and pentavalent confirmed; PCV open-vial conflict (D-25);
+  # OPV, PCV, IPV, ROTA vial sizes and IPV and ROTA policy still VERIFY.
+  BCG:  {name: BCG, doses_per_vial: 20, open_vial_policy: false}
+  OPV:  {name: Oral polio vaccine, doses_per_vial: 20, open_vial_policy: true}
+  PENTA: {name: DPT-HepB-Hib (pentavalent), doses_per_vial: 1, open_vial_policy: true}
+  PCV:  {name: Pneumococcal conjugate vaccine (PCV10), doses_per_vial: 4, open_vial_policy: true}
+  ROTA: {name: Rotavirus (Rotarix), doses_per_vial: 1, open_vial_policy: true}
+  IPV:  {name: Inactivated polio vaccine, doses_per_vial: 5, open_vial_policy: true}
+  MR:   {name: Measles-rubella, doses_per_vial: 10, open_vial_policy: false}
+
+contacts:
+  # contact: recommended age in days; the doses due at that contact
+  birth: {age_days: 0, doses: [BCG-1, OPV-0]}
+  w6:    {age_days: 42, doses: [OPV-1, PENTA-1, PCV-1, ROTA-1]}
+  w10:   {age_days: 70, doses: [OPV-2, PENTA-2, PCV-2, ROTA-2]}
+  w14:   {age_days: 98, doses: [OPV-3, PENTA-3, PCV-3, IPV-1]}
+  m9:    {age_days: 274, doses: [MR-1]}
+  m18:   {age_days: 548, doses: [MR-2]}
+
+dose_rules:
+  # min_age_days, max_age_days (null = no limit in this simulation), min_interval_days from the previous dose
+  BCG-1:   {min_age: 0, max_age: 365, min_interval: 0}
+  OPV-0:   {min_age: 0, max_age: 14, min_interval: 0}
+  OPV-1:   {min_age: 42, max_age: 365, min_interval: 28}
+  OPV-2:   {min_age: 70, max_age: 365, min_interval: 28}
+  OPV-3:   {min_age: 98, max_age: 365, min_interval: 28}
+  PENTA-1: {min_age: 42, max_age: 365, min_interval: 0}
+  PENTA-2: {min_age: 70, max_age: 365, min_interval: 28}
+  PENTA-3: {min_age: 98, max_age: 365, min_interval: 28}
+  PCV-1:   {min_age: 42, max_age: 365, min_interval: 0}
+  PCV-2:   {min_age: 70, max_age: 365, min_interval: 28}
+  PCV-3:   {min_age: 98, max_age: 365, min_interval: 28}
+  ROTA-1:  {min_age: 42, max_age: 105, min_interval: 0}
+  ROTA-2:  {min_age: 70, max_age: 168, min_interval: 28}
+  IPV-1:   {min_age: 98, max_age: 365, min_interval: 0}
+  MR-1:    {min_age: 274, max_age: 730, min_interval: 0}
+  MR-2:    {min_age: 548, max_age: 1825, min_interval: 28}
+
+dirty_import:
+  rows: 600                 # Clean rows sampled from the event and stock tables before defects are injected
+  defect_share: 0.15

@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Immunization DSS wireframes</title>
+<style>
+  :root {
+    --ink: #1f1f1d; --ink-2: #5a5955; --line: #b9b8b2; --fill: #efeee9; --paper: #ffffff;
+    --accent: #2a78d6; --note: #fdf6e3; --note-line: #c9b98a; --alert: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); background: #f7f7f4; }
+  header.doc { padding: 16px; border-bottom: 1px solid var(--line); background: var(--paper); }
+  header.doc h1 { margin: 0 0 4px; font-size: 20px; }
+  header.doc p { margin: 0; color: var(--ink-2); font-size: 13px; }
+  nav.screens { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 16px; }
+  nav.screens a { padding: 6px 12px; border: 1px solid var(--line); border-radius: 16px; color: var(--ink); text-decoration: none; background: var(--paper); }
+  nav.screens a:focus-visible, nav.screens a:hover { border-color: var(--accent); outline: none; }
+  section.screen { margin: 0 16px 32px; }
+  section.screen > h2 { font-size: 16px; margin: 16px 0 8px; }
+  .frame { background: var(--paper); border: 2px solid var(--ink); border-radius: 8px; overflow: hidden; }
+  .appbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 2px solid var(--ink); }
+  .appbar b { font-size: 15px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tab { padding: 4px 10px; border: 1px solid var(--line); border-radius: 4px; font-size: 13px; }
+  .tab.on { border-color: var(--ink); font-weight: 600; }
+  .who { font-size: 12px; color: var(--ink-2); }
+  .body { padding: 14px; display: grid; gap: 14px; }
+  .grid-2 { display: grid; gap: 14px; grid-template-columns: 1fr; }
+  @media (min-width: 760px) { .grid-2 { grid-template-columns: 1.4fr 1fr; } }
+  .box { border: 1.5px dashed var(--line); border-radius: 6px; padding: 10px; background: var(--fill); }
+  .box h3 { margin: 0 0 8px; font-size: 14px; }
+  .banner { border: 2px solid var(--alert); border-radius: 6px; padding: 8px 10px; background: #fbeceb; font-size: 14px; }
+  .banner b { color: var(--alert); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; background: var(--paper); }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  th { font-weight: 600; }
+  .scroll { overflow-x: auto; }
+  .chart { height: 150px; border: 1.5px solid var(--line); border-radius: 4px; background:
+    linear-gradient(to top, transparent 24%, var(--line) 24%, var(--line) 25%, transparent 25%) ,
+    var(--paper); position: relative; }
+  .chart::after { content: "Forecast chart: 12 weeks of history, 4 forecast weeks with 80% band (Recharts). Table view button below."; position: absolute; inset: auto 8px 8px 8px; font-size: 12px; color: var(--ink-2); }
+  .btn { display: inline-block; padding: 6px 12px; border: 1.5px solid var(--ink); border-radius: 4px; font-size: 13px; background: var(--paper); }
+  .btn.primary { background: var(--ink); color: var(--paper); }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .field { display: grid; gap: 4px; font-size: 13px; }
+  .field span { color: var(--ink-2); }
+  .input { height: 32px; border: 1.5px solid var(--line); border-radius: 4px; background: var(--paper); min-width: 160px; }
+  .note { border: 1px solid var(--note-line); background: var(--note); border-radius: 4px; padding: 8px 10px; font-size: 12.5px; }
+  .note b { font-weight: 600; }
+  .pill { display: inline-block; padding: 1px 8px; border-radius: 10px; border: 1px solid var(--line); font-size: 12px; }
+  .pill.over { border-color: var(--alert); color: var(--alert); }
+  .login { max-width: 360px; margin: 24px auto; display: grid; gap: 12px; }
+  .muted { color: var(--ink-2); font-size: 12px; }
+  footer.doc { margin: 0 16px 24px; color: var(--ink-2); font-size: 12px; }
+</style>
+</head>
+<body>
+<header class="doc">
+  <h1>Immunization DSS: low-fidelity wireframes</h1>
+  <p>Phase 2 design draft, 28 September 2026. Layout and content only, not visual design. All names and numbers are placeholders, not results. Requirement IDs refer to the frozen requirements list (FR, NFR).</p>
+</header>
+<nav class="screens" aria-label="Screens">
+  <a href="#login">1. Login</a><a href="#inventory">2. Inventory</a><a href="#scheduling">3. Scheduling</a><a href="#child">4. Child record</a>
+</nav>
+
+<section class="screen" id="login">
+  <h2>1. Login (FR-01, NFR-03)</h2>
+  <div class="frame"><div class="body">
+    <div class="login">
+      <b style="font-size:18px">Immunization DSS</b>
+      <label class="field"><span>Username</span><div class="input"></div></label>
+      <label class="field"><span>Password</span><div class="input"></div></label>
+      <span class="btn primary">Log in</span>
+      <span class="muted">No self-registration: accounts are created by the system administrator. After repeated failed attempts the account is locked for a period.</span>
+    </div>
+    <div class="note"><b>Notes.</b> Generic error message ("username or password incorrect") so accounts cannot be probed. After login the user lands on the dashboard for their role and facility.</div>
+  </div></div>
+</section>
+
+<section class="screen" id="inventory">
+  <h2>2. Inventory dashboard, Module 1 (FR-11 to FR-15)</h2>
+  <div class="frame">
+    <div class="appbar"><b>Facility name (synthetic)</b>
+      <div class="tabs"><span class="tab on">Inventory</span><span class="tab">Scheduling</span><span class="tab">Children</span></div>
+      <span class="who">Health worker &middot; Log out</span></div>
+    <div class="body">
+      <div class="banner"><b>Stock-out alert:</b> Antigen X projected below its safety minimum in week N, before the next delivery. <span class="btn">Acknowledge (manager)</span></div>
+      <div class="grid-2">
+        <div class="box"><h3>Current stock and forecast</h3>
+          <div class="row" style="margin-bottom:8px"><span class="field"><span>Antigen</span></span><span class="tab on">Antigen X</span><span class="tab">Antigen Y</span></div>
+          <div class="chart" role="img" aria-label="Placeholder forecast chart"></div>
+          <div class="row" style="margin-top:8px"><span class="btn">Show as table</span><span class="muted">Model used and last backtest accuracy (FR-15) shown under the chart</span></div>
+        </div>
+        <div class="box"><h3>Stock by antigen</h3>
+          <div class="scroll"><table>
+            <thead><tr><th>Antigen</th><th>Doses</th><th>Weeks left</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td>Antigen X</td><td>nn</td><td>n.n</td><td><span class="pill over">Alert</span></td></tr>
+              <tr><td>Antigen Y</td><td>nnn</td><td>n.n</td><td><span class="pill">OK</span></td></tr>
+              <tr><td>Antigen Z</td><td>nnn</td><td>n.n</td><td><span class="pill">OK</span></td></tr>
+            </tbody></table></div>
+          <div class="row" style="margin-top:8px"><span class="btn primary">Record transaction</span><span class="btn">Stock policy (manager)</span></div>
+        </div>
+      </div>
+      <div class="note"><b>Notes.</b> Record transaction opens a form: kind (receipt, issue, wastage, loss, adjustment), antigen, lot, quantity, date (FR-10). Stock is always the sum of the ledger, never typed in. Every chart has a table view and a colour-blind-safe palette (NFR-07).</div>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="scheduling">
+  <h2>3. Scheduling dashboard, Module 2 (FR-20 to FR-24)</h2>
+  <div class="frame">
+    <div class="appbar"><b>Facility name (synthetic)</b>
+      <div class="tabs"><span class="tab">Inventory</span><span class="tab on">Scheduling</span><span class="tab">Children</span></div>
+      <span class="who">Facility manager &middot; Log out</span></div>
+    <div class="body">
+      <div class="grid-2">
+        <div class="box"><h3>Defaulters, in priority order</h3>
+          <div class="row" style="margin-bottom:8px"><span class="muted">Overdue = more than 28 days after the due date (BR-02). Order: most overdue doses, then nearest to an age limit (BR-04).</span></div>
+          <div class="scroll"><table>
+            <thead><tr><th>#</th><th>Child (system ID)</th><th>Age</th><th>Overdue doses</th><th>Nearest age limit</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>IMM-...-00001</td><td>n mo</td><td><span class="pill over">3</span> Dose A, B, C</td><td>in n days</td></tr>
+              <tr><td>2</td><td>IMM-...-00002</td><td>n mo</td><td><span class="pill over">2</span> Dose A, B</td><td>in n days</td></tr>
+              <tr><td>3</td><td>IMM-...-00003</td><td>n mo</td><td><span class="pill over">1</span> Dose C</td><td>in n days</td></tr>
+            </tbody></table></div>
+        </div>
+        <div class="box"><h3>Plan an outreach session</h3>
+          <div style="display:grid;gap:8px">
+            <label class="field"><span>Date</span><div class="input"></div></label>
+            <label class="field"><span>Location</span><div class="input"></div></label>
+            <label class="field"><span>Capacity (children)</span><div class="input"></div></label>
+            <span class="btn primary">Generate plan</span>
+          </div>
+        </div>
+      </div>
+      <div class="box"><h3>Session plan: vaccines to carry</h3>
+        <div class="scroll"><table>
+          <thead><tr><th>Antigen</th><th>Doses needed</th><th>Available by session date</th><th>Shortfall</th></tr></thead>
+          <tbody>
+            <tr><td>Antigen X</td><td>nn</td><td>nn</td><td><span class="pill over">n short</span></td></tr>
+            <tr><td>Antigen Y</td><td>nn</td><td>nnn</td><td>none</td></tr>
+          </tbody></table></div>
+        <div class="row" style="margin-top:8px"><span class="btn">Print list</span><span class="btn">Record attendance (on the day)</span></div>
+      </div>
+      <div class="note"><b>Notes.</b> Session planning is for facility managers; health workers see the list and record attendance and doses on the day (FR-24), which updates the child record and the stock ledger.</div>
+    </div>
+  </div>
+</section>
+
+<section class="screen" id="child">
+  <h2>4. Child record, Module 3 (FR-30 to FR-36)</h2>
+  <div class="frame">
+    <div class="appbar"><b>Facility name (synthetic)</b>
+      <div class="tabs"><span class="tab">Inventory</span><span class="tab">Scheduling</span><span class="tab on">Children</span></div>
+      <span class="who">Health worker &middot; Log out</span></div>
+    <div class="body">
+      <div class="box"><h3>Find a child</h3>
+        <div class="row">
+          <label class="field"><span>System ID</span><div class="input"></div></label>
+          <span class="muted">or</span>
+          <label class="field"><span>Family name</span><div class="input"></div></label>
+          <label class="field"><span>Date of birth</span><div class="input"></div></label>
+          <span class="btn primary">Search</span><span class="btn">Register new child</span>
+        </div>
+        <p class="muted">Search covers all facilities; a record from another facility opens read-only and the access is logged (BR-08). Registering warns about a likely duplicate first (FR-36).</p>
+      </div>
+      <div class="grid-2">
+        <div class="box"><h3>Immunization history</h3>
+          <div class="muted" style="margin-bottom:6px">Name (synthetic) &middot; system ID &middot; date of birth &middot; registered at facility</div>
+          <div class="scroll"><table>
+            <thead><tr><th>Dose</th><th>Date given</th><th>Facility</th><th>Lot</th></tr></thead>
+            <tbody>
+              <tr><td>Dose A</td><td>dd mmm yyyy</td><td>Facility</td><td>LOT-...</td></tr>
+              <tr><td>Dose B</td><td>dd mmm yyyy</td><td>Facility</td><td>LOT-...</td></tr>
+            </tbody></table></div>
+          <div class="row" style="margin-top:8px"><span class="btn primary">Record dose</span><span class="btn">Export FHIR R4</span></div>
+        </div>
+        <div class="box"><h3>Next due doses</h3>
+          <table><thead><tr><th>Dose</th><th>Due</th><th>State</th></tr></thead>
+            <tbody>
+              <tr><td>Dose C</td><td>dd mmm</td><td><span class="pill over">Overdue</span></td></tr>
+              <tr><td>Dose D</td><td>dd mmm</td><td><span class="pill">Due</span></td></tr>
+              <tr><td>Dose E</td><td>n/a</td><td><span class="pill">Closed (age limit)</span></td></tr>
+            </tbody></table>
+        </div>
+      </div>
+      <div class="note"><b>Notes.</b> Record dose validates the minimum age, the interval since the previous dose and the maximum age (BR-01, BR-03), refuses a second copy of the same dose (BR-06), and issues the dose from stock automatically.</div>
+    </div>
+  </div>
+</section>
+
+<footer class="doc">Responsive from 360 px (NFR-06). Keyboard reachable controls and labelled inputs in the real build (NFR-07). Offline: the last loaded dashboards stay readable (FR-42, pending D-10).</footer>
+</body>
+</html>

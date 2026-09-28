@@ -1,0 +1,66 @@
+# Notes are versioned; copies of third-party reference documents and review files stay local
+docs/reference/
+pr_*.md
+
+# Progress reports for the supervisor: local only
+Progress_Report_*.docx
+Progress_Report_*.pdf
+
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Data: raw, interim and processed files never enter git; READMEs and manifests do
+data/*
+!data/README.md
+!data/MANIFEST.json
+models/*
+!models/README.md
+*.h5
+*.keras
+*.joblib
+*.pkl
+*.parquet
+*.sav
+*.dta
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+
+# Node / frontend
+node_modules/
+frontend/dist/
+*.tsbuildinfo
+coverage/
+test-results/
+playwright-report/
+
+# Database dumps and exports
+*.sql
+*.sqlite3
+*.dump
+exports/
+
+# Editor and OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+*.tmp
+~$*
