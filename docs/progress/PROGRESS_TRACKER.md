@@ -70,9 +70,62 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 
 **Limitation I will state in my report:** the models are tested on data produced by rules I designed, not on real clinic records. To reduce this, the models only see what a real system would see (clinic records), never the hidden truth, and I compare them against simple baseline methods. Testing on real facility data is recommended as future work.
 
-# 4. Phase status
+# 4. How I generated the data and where it is stored
 
-**Table 3: Phase status**
+**How it is generated.** I wrote a data generator as a Python package in my repository (`analytics/`). One command, `python3 scripts/dev.py simulate`, runs it with a fixed random seed (42), so the same settings always produce exactly the same dataset. All settings are in one file, `analytics/configs/sim.yaml`, where every value is marked either PUBLISHED (with its source, mainly the KDHS 2022 Key Indicators Report, Table 11, and the Ministry of Health immunization guidelines) or ASSUMPTION (with my reason). The generator works in these steps:
+
+**Table 3: Steps of the data generator**
+
+| Step | What happens |
+|---|---|
+| 1. Population | 12 fictional facilities (5 dispensaries, 4 health centres, 3 sub-county hospitals). Children are born every week from January 2019, each with a sex, mother's education, wealth quintile and birth order in the KDHS 2022 proportions |
+| 2. Behaviour | Each child gets a chance of never starting vaccination, of dropping out after a visit, and of arriving late (more often in the rainy months) |
+| 3. Calibration | A quick simulation of 40,000 children is repeated, adjusting these chances until coverage for all 16 doses matches KDHS 2022 |
+| 4. Clinic and stock simulation | Session by session from 2019 to 29 December 2025: children attend, due doses are given only if vaccine is in stock, monthly deliveries arrive (sometimes late, short or missing), two supply disruptions occur, and opened vials are discarded under the open-vial rules. The full simulation is then re-checked against KDHS and corrected in small steps until every dose is within 1.5 points or 8 rounds are used |
+| 5. Broken import files | Two CSV files with about 15% deliberately wrong rows, plus an answer key, to test my import checks |
+| 6. Output and checks | The files are written with a manifest (row count and a SHA-256 fingerprint of every file, the seed and the settings), then the 11 checks in Table 2 run automatically. A run that fails any check cannot be loaded into the system |
+
+It takes about two minutes on one processor core of my laptop. If nothing has changed, the command recognises the existing dataset and finishes in about a second instead of regenerating it.
+
+**Where it is stored.** Each run gets its own folder named after its seed and settings. The dataset I use is `data/synthetic/sim-seed42-368707d3/` (53 MB). It is kept only on my laptop and is not uploaded to GitHub, because anyone can rebuild it byte for byte from the repository, and the fingerprints prove the rebuild is identical. The folder has three parts:
+
+**Table 4: What the dataset folder contains and who may use it**
+
+| Part | Contents | Used for |
+|---|---|---|
+| `app/` | Facilities, vaccine schedule, 35,525 registered children, 499,839 vaccination records, 17,724 sessions, 84,941 stock transactions, vaccine lots | The only part loaded into the system's database; also the only input for training the forecasting models |
+| `truth/` | What really happened: true weekly demand and stock-out weeks, all 36,431 children born (including those never registered), doses refused because of stock-outs | Only for scoring the accuracy of my forecasts, alerts and defaulter lists. Never loaded into the system and never given to a model |
+| `imports/` | The two broken CSV files and their answer key | Measuring how many planted errors my import feature catches |
+
+The `app/` part is loaded into the system's PostgreSQL 16 database, which runs in Docker on my laptop (`python3 scripts/dev.py load`, about 60 seconds). For model training, Google Colab regenerates the same dataset from the public repository and checks every fingerprint against the reference file `analytics/configs/evidence_hashes.json`, so no data is ever uploaded. The full step-by-step description is in `docs/12_DATA_TO_TRAINING_PIPELINE.md` in my repository.
+
+# 5. User roles and what each can access
+
+My proposal (section 3.8.4) defines three roles. I have added two rules: every user is limited to their own facility, and the system administrator does not see clinical data. There is no self-registration; the administrator creates every account.
+
+**Table 5: Roles and access in Prototype 1 (every row is checked by an automated test for every role)**
+
+| What | Health worker | Facility manager | System administrator |
+|---|---|---|---|
+| Proposal definition | Read and write child records and stock data; read forecasts and session plans | Full access to all modules and facility configuration | User management and system configuration |
+| Log in, log out, own profile | Yes | Yes | Yes |
+| List and register children | Own facility | Own facility | No |
+| Search children and view a child's record from another facility (health passport) | Read only, and each view is logged | Read only, and each view is logged | No |
+| Record a vaccination | Own facility | Own facility | No |
+| View the vaccine schedule | Yes | Yes | No |
+| View stock balances and record stock transactions | Own facility | Own facility | No |
+| View the defaulter list | Own facility | Own facility | No |
+| Immunization sessions | View | View and create | No |
+| Import CSV files | No | Yes | No |
+| View the facility audit log | No | Yes | No |
+| Manage user accounts | No | No | List and create |
+| View facilities | No | No | Yes |
+
+Every check happens on the server before any data is read: a request without a valid login is refused (401), and a user without the right role or facility is refused (403). The screens only hide what a role cannot use. Still to add, as the proposal requires: viewing forecasts and stock-out alerts (health worker read, manager read and acknowledge) and stock settings for the manager in Phase 4, and schedule editing by the administrator in a later phase.
+
+# 6. Phase status
+
+**Table 6: Phase status**
 
 | # | Phase | Planned dates | Status |
 |---|---|---|---|
@@ -87,7 +140,7 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 | 7 | Documentation (Chapters 4 to 6) | 5 Oct to 15 Nov | Not started |
 | 8 | System demonstration | 16 to 22 Nov | Not started |
 
-# 5. Phase by phase
+# 7. Phase by phase
 
 ## Phase 0: Setup
 
@@ -187,11 +240,11 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 
 **Pending:** all.
 
-# 6. Corrections I found in my proposal
+# 8. Corrections I found in my proposal
 
 While planning, I re-read my proposal and listed items to correct, including four in-text citations missing from the reference list, four references that are never cited, a missing description of user acceptance testing in section 3.6, and an inconsistency about whether the health passport needs a live database connection. Sections 3.3 and 3.2.1 will also need to describe the synthetic, calibrated data in place of secondary datasets. I will correct these in my own words for the final report.
 
-# 7. Where I need your input
+# 9. Where I need your input
 
 1. Is the fully synthetic dataset, calibrated to the KDHS 2022 coverage figures, acceptable in place of the secondary datasets described in section 3.3 of my proposal?
 2. My proposal targets "more than 95% accuracy" for stock alerts and defaulter categorisation. I propose to measure it as (a) at least 95% of true stock-outs alerted up to 4 weeks ahead, with the false alarm rate also reported, and (b) defaulter status matching the true status for at least 95% of children. Is this acceptable?
@@ -202,7 +255,7 @@ While planning, I re-read my proposal and listed items to correct, including fou
 7. Could you review my wireframes and design diagrams (attached)?
 8. For the model comparison, I propose testing on the last 24 weeks (6 periods of 4 weeks) instead of 26, and modelling yearly seasonality in SARIMA with Fourier terms because the standard 52-week seasonal term is too slow for 84 series. Are these acceptable?
 
-# 8. Next seven days (30 September to 6 October)
+# 10. Next seven days (30 September to 6 October)
 
 | Task | Output I will show you |
 |---|---|
