@@ -138,5 +138,8 @@ TIME_ZONE = "Africa/Nairobi"
 USE_I18N = False
 USE_TZ = True
 
+# Clinical "today" for the synthetic demo (dataset as-of date); empty means the real date (D-32).
+IMMDSS_TODAY = os.environ.get("IMMDSS_TODAY", "")
+
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
