@@ -1,6 +1,6 @@
 # 11. Project handbook
 
-The single reference for how the Immunization Decision Support System works: status, setup, Docker, data generation, every script and command, roles and what each can access, and how everything is checked. Detailed stage-by-stage data and training plan: doc 12. Decisions: doc 07. Rules: doc 10.
+The single reference for how the Immunization Decision Support System works: status, setup, Docker, data generation, every script and command, roles and what each can access, and how everything is checked. Detailed stage-by-stage data and training plan: doc 12. Data generation, storage and role access in one place: doc 13. Decisions: doc 07. Rules: doc 10.
 
 Status as of 29 September 2026. Evidence run: `sim-seed42-368707d3`.
 
