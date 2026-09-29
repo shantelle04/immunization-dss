@@ -9,9 +9,9 @@ date: "Status as of 28 September 2026"
 
 My proposal is complete (draft 4), and I have moved into building the system. I have set up the project repository and a full execution plan that follows the four evolutionary prototyping phases in my Chapter 3, broken into eight working phases, each with a clear completion check.
 
-The main progress this week is the data. Requesting real survey microdata would have taken longer than my timeline allows, so, in line with my limitations section (1.7), I have built a **seeded synthetic dataset** for the whole project. It is calibrated so that its vaccination coverage matches Kenya's official figures from the Kenya Demographic and Health Survey 2022. The dataset is generated, it passes all 11 automatic quality checks, and anyone can regenerate the identical dataset from the same settings in about one minute.
+The main progress this week is the data. Requesting real survey microdata would have taken longer than my timeline allows, so, in line with my limitations section (1.7), I have built a **seeded synthetic dataset** for the whole project. It is calibrated so that its vaccination coverage matches Kenya's official figures from the Kenya Demographic and Health Survey 2022. The dataset is generated, it passes all 11 automatic quality checks, and anyone can regenerate the identical dataset from the same settings in about two minutes.
 
-Compared to my proposal Gantt chart, I am about two weeks behind on design, which was planned to finish in September. Because the data is now ready earlier than planned, I can start design and the first prototype in parallel from this week.
+Since the last update I have also frozen my requirements and drafted all the design diagrams and screen sketches from my proposal (section 5, Phase 2), so design is back on the September timeline of my Gantt chart, subject to your review. The project is saved in my private GitHub repository, and the first prototype starts on 5 October.
 
 # 2. Have I started cleaning the datasets?
 
@@ -75,7 +75,7 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 | # | Phase | Planned dates | Status |
 |---|---|---|---|
 | | Proposal | April to June | Done (draft 4, Turnitin similarity 11%) |
-| 0 | Setup | 28 to 30 Sep | In progress (skeletons and tests done; first upload and my `.env` pending) |
+| 0 | Setup | 28 to 30 Sep | Done (all tests pass; first upload pushed, commit a308e62) |
 | 1 | Synthetic data and exploration | 28 Sep to 9 Oct | In progress (dataset regenerated after D-18 and D-19 and validated; figures done; supervisor sign-off pending) |
 | 2 | Requirements and design | 29 Sep to 9 Oct | In progress (requirements frozen, all diagrams and wireframes drafted; supervisor review pending) |
 | 3 | Prototype 1: data layer and the three module screens | 5 to 18 Oct | Not started |
@@ -93,22 +93,16 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 
 **Done:**
 
-- Set up the local repository with rules that stop data files, secrets and working notes from ever being uploaded, and a check that only allows uploads to my own GitHub account.
-- Created a dedicated SSH key and confirmed that it connects to my GitHub account; set my commit identity for this project only.
+- Created a dedicated SSH key for this project and set my commit identity for this project only; uploads are allowed only to my own GitHub account.
 - Built the backend skeleton (Django). It refuses to start if any password or secret key is missing, too short, or left as the example value; 17 automated tests prove this.
 - Built the frontend skeleton (React with TypeScript), with one passing automated test.
-- Set up the database (PostgreSQL 16) to run in Docker, so the same setup works on Linux and Windows. The application and the tests use separate database accounts. I tested it with temporary values: it rejects example passwords and creates both accounts correctly.
-- Added one command runner and a quick-start guide in the README for Linux and Windows, and pinned every library version so the project installs the same way on any machine.
-- The analytics code now has 25 passing tests, and the code style checker reports no problems.
+- Set up the database (PostgreSQL 16) to run in Docker, so the same setup works on Linux and Windows. The application and the tests use separate database accounts, and the database refuses example passwords.
+- Added one command runner and a quick-start guide for Linux and Windows, pinned every library version, and made creating my `.env` file with strong random passwords one command that never shows them on screen.
+- Every test, check and data run is recorded automatically, with its time and result, in a results log in my project notes. Data generation runs on one processor core at low priority and is skipped when nothing has changed.
+- Ran the one-step setup: the database is healthy, Django's system check passes, and all tests pass (33 analytics, 5 runner, 17 backend, 1 frontend).
+- First upload done: commit `a308e62` (141 files: code plus my project notes, so the project can be set up on another machine from one download) pushed to my private GitHub repository. Checks block secrets, generated data, copies of other people's documents, assistant guides and computer-specific folder paths, even if added by mistake.
 
-- Every test, check and data run is now recorded automatically, with its time and result, in a results log in my project notes.
-- Creating my `.env` file with strong random passwords is now one command (`python3 scripts/dev.py env`). It is tested, and it never shows the passwords on screen.
-- Data generation uses one processor core and about 0.7 GB of memory for about 70 seconds, at low priority, and it is skipped entirely when nothing has changed.
-
-- Generated my `.env` and ran the one-step setup (`dev.py bootstrap`): the database started in Docker and is healthy, Django's system check passed, and all tests passed (33 analytics, 5 runner, 17 backend, 1 frontend), recorded in my results log.
-- Prepared the first upload: 141 files (code plus my project notes, so the project can be set up on another machine from one download). Checked so that no assistant guides, copies of other people's documents, data, secrets or computer-specific folder paths are included; the protection blocks them even if added by mistake.
-
-**Pending:** the first upload to GitHub (nothing has been uploaded yet); supervisor confirmation of D-02 (synthetic data) and D-07 (what 95% accuracy means) (section 7).
+**Pending:** nothing.
 
 ## Phase 1: Synthetic data and exploration
 
@@ -120,11 +114,8 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 - Tuned it in two stages to match the KDHS 2022 coverage figures: first without stock limits, then with stock-outs included.
 - Added the 11 automatic checks and 23 tests, including a test that the same seed always gives identical files.
 - Separated what the system is allowed to see (clinic records) from the ground truth that is used only to evaluate it.
-
 - Produced the eight exploration figures (F-D1 to F-D8) and a dataset description table (T-5.1) with a repeatable command (`immdss eda`), which only works on a dataset that passed the quality checks. Figures and their data tables are in `docs/evidence/`.
-
 - Applied my decisions D-18 and D-19 in the generator, not by editing data, with 3 new tests (28 tests passing). The first regenerated dataset failed the coverage check (measles-rubella 1 was 3.2 points off), so I gave the calibration one more round. The final dataset passes all 11 checks and reproduces byte for byte from the same seed. I archived the previous figures and regenerated all eight.
-
 - Compared vaccine wastage with WHO planning figures, and vial sizes and open-vial rules with the Kenya Ministry of Health immunization guidelines (sources saved, with page numbers). Measles-rubella wastage (46%) was close to WHO's figure (40%); BCG (79%) was above WHO's 50%.
 - Because of that, I decided (D-23) to give BCG on one day a week at sub-county hospitals as well. BCG wastage fell to 66%. The first dataset after this change failed the coverage check (OPV3 3.1 points off), and a second one passed but only by chance (its tuning swung up and down). I changed the tuning method so that each step is smaller and it stops once close enough (D-26). The accepted dataset (`sim-seed42-368707d3`) passes all 11 checks (largest gap 2.5 points, measles-rubella 1) and reproduces byte for byte. Measles-rubella 1 cannot get closer to the KDHS figure because some children sent away to the vaccine day do not come back; I report this as a limitation. I regenerated all eight figures; 33 analytics tests pass.
 - Decided (D-24) to keep the BCG age limit at one year in the generator but use the Kenyan limit (59 months) in the system, and (D-25) to keep reusable pneumococcal vials for now and ask you about current practice.
@@ -167,13 +158,13 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 
 **What this phase is:** testing with real users using set tasks and the System Usability Scale, then final integration testing (proposal 3.2.4).
 
-**Pending:** all. I need your guidance on participants and ethics (section 6).
+**Pending:** all. I need your guidance on participants and ethics (section 7, question 3).
 
 ## Phase 7: Documentation
 
 **What this phase is:** writing Chapters 4 to 6 from the results as they come in. I keep logs of every data run, model run and test so that every number in the report can be traced.
 
-**Pending:** writing starts once the Phase 2 diagrams are ready.
+**Pending:** the diagrams and requirements for Chapter 4 are ready, so I can start writing Chapter 4 once you have reviewed them.
 
 ## Phase 8: Demonstration
 
@@ -191,13 +182,15 @@ While planning, I re-read my proposal and listed items to correct, including fou
 2. My proposal targets "more than 95% accuracy" for stock alerts and defaulter categorisation. I propose to measure it as (a) at least 95% of true stock-outs alerted up to 4 weeks ahead, with the false alarm rate also reported, and (b) defaulter status matching the true status for at least 95% of children. Is this acceptable?
 3. For user acceptance testing, do I need ethics clearance, and could you suggest healthcare workers or a group I could approach?
 4. Could you confirm the dates for the system demonstration and the Chapter 4 to 6 submissions?
+5. In current Kenyan practice, may an opened 4-dose pneumococcal (PCV10) vial be used in later sessions, or is it discarded after 6 hours as the 2013 national guidelines state?
+6. My design diagrams are drawn with PlantUML (a text-based tool, so they stay consistent with the database design). Are these acceptable, or should I redraw them in StarUML or Visual Paradigm?
+7. Could you review my wireframes and design diagrams (attached) before I build the first prototype?
 
-# 8. Next seven days (28 September to 4 October)
+# 8. Next seven days (29 September to 5 October)
 
 | Task | Output I will show you |
 |---|---|
-| Exploration charts from the synthetic data (done 28 Sep) | Figures F-D1 to F-D8 and the dataset description table |
-| Fix the two dataset weaknesses (done 28 Sep, partly improved) | Before and after tables |
-| Design diagrams started | Use case and ERD drafts |
-| Project skeleton (Django, React, database) (done 28 Sep, database pending my `.env`) | Test run output |
-| First upload to GitHub | Repository link |
+| Your review of requirements, diagrams and wireframes | Your feedback, recorded in my decision log |
+| Wireframe screenshots and diagrams prepared for Chapter 4 | Figures with captions |
+| Plan for the first prototype (login, database loaded with the synthetic data, three basic screens) | Plan and data model for your sign-off before building |
+| Start of the first prototype (5 October) | Login and database working with tests |
