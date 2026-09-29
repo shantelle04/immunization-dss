@@ -135,6 +135,7 @@ class ChildImmunizationsView(APIView):
         statuses = services.child_statuses(child, today())
         return Response(
             {
+                "as_of": today(),
                 "child": ChildSerializer(child).data,
                 "read_only": cross,
                 "history": [

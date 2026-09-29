@@ -8,6 +8,7 @@ Progress_Report_*.pdf
 
 # Secrets and local environment
 .env
+.demo_credentials*
 .env.*
 !.env.example
 *.pem

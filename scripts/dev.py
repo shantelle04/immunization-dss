@@ -15,6 +15,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -50,10 +51,16 @@ def _low_priority() -> dict:
     return {"preexec_fn": lambda: os.nice(10)}
 
 
-def run(*cmd: str | Path, cwd: Path = ROOT, heavy: bool = False, exit_on_error: bool = True) -> Result:
+def run(
+    *cmd: str | Path,
+    cwd: Path = ROOT,
+    heavy: bool = False,
+    exit_on_error: bool = True,
+    extra_env: dict | None = None,
+) -> Result:
     """Run a command, echo its output live, and keep a copy for the ledger."""
     print("$", " ".join(str(c) for c in cmd), flush=True)
-    env = {**os.environ, **ONE_THREAD} if heavy else None
+    env = {**os.environ, **(ONE_THREAD if heavy else {}), **(extra_env or {})} if heavy or extra_env else None
     start = time.perf_counter()
     proc = subprocess.Popen(
         [str(c) for c in cmd],
@@ -301,6 +308,97 @@ def diagrams(_: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _clinical_env() -> dict:
+    """IMMDSS_TODAY from the environment, else the evidence run's as-of date (D-32)."""
+    if os.environ.get("IMMDSS_TODAY"):
+        return {}
+    manifest = ROOT / DEFAULT_RUN / "manifest.json"
+    if not manifest.exists():
+        return {}
+    return {"IMMDSS_TODAY": json.loads(manifest.read_text())["window"]["as_of"]}
+
+
+def load(args: argparse.Namespace) -> None:
+    cmd = [PY, "manage.py", "load_synthetic", ROOT / args.run] + (["--replace"] if args.replace else [])
+    result = run(*cmd, cwd=ROOT / "backend", heavy=True, exit_on_error=False)
+    counts = dict(line.split(": ", 1) for line in result.output.splitlines() if ": " in line)
+    record("load", [result], counts)
+    if result.code:
+        sys.exit(result.code)
+
+
+def demo_users(args: argparse.Namespace) -> None:
+    cmd = [PY, "manage.py", "seed_demo_users"] + (["--reset"] if args.reset else [])
+    result = run(*cmd, cwd=ROOT / "backend", exit_on_error=False)
+    record("demo-users", [result], {"summary": result.output.strip().splitlines()[-1:]})
+    if result.code:
+        sys.exit(result.code)
+
+
+def walkthrough(args: argparse.Namespace) -> None:
+    out = ROOT / "docs" / "evidence" / f"P1_walkthrough_{Path(args.run).name}.md"
+    result = run(
+        PY,
+        "-m",
+        "evaluation.walkthrough",
+        ROOT / args.run,
+        "--out",
+        out,
+        cwd=ROOT / "backend",
+        heavy=True,
+        exit_on_error=False,
+        extra_env=_clinical_env(),
+    )
+    details: dict = {"report": out.name}
+    if result.code == 0:
+        data = json.loads(result.output[result.output.index("{") :])
+        details["max_p95_ms"] = max(r["p95_ms"] for r in data["latency"])
+        details["accuracy_pct"] = {r["query"]: r["accuracy_pct"] for r in data["accuracy"]}
+        planted = [r for r in data["ingestion"] if not r["defect"].startswith("(")]
+        clean = [r for r in data["ingestion"] if r["defect"].startswith("(")]
+        for label, rows in (("defects_caught", planted), ("clean_rows_rejected", clean)):
+            details[label] = f"{sum(r['caught_any'] for r in rows)}/{sum(r['planted'] for r in rows)}"
+    record("walkthrough", [result], details)
+    if result.code:
+        sys.exit(result.code)
+
+
+def run_app(_: argparse.Namespace) -> None:
+    """Backend on 127.0.0.1:8000 and the frontend on http://localhost:5173 (API proxied); Ctrl+C stops."""
+    env = {**os.environ, **_clinical_env()}
+    # Each server gets its own process group so stopping it also stops children (npm starts vite).
+    if os.name == "nt":
+        group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    else:
+        group = {"start_new_session": True}
+    server = [str(PY), "manage.py", "runserver", "127.0.0.1:8000"]
+    backend = subprocess.Popen(server, cwd=ROOT / "backend", env=env, **group)
+    frontend = subprocess.Popen([npm(), "run", "dev"], cwd=ROOT / "frontend", env=env, **group)
+    print("\nOpen http://localhost:5173  (Ctrl+C to stop)\n", flush=True)
+    signal.signal(signal.SIGTERM, _interrupt)  # a plain kill also stops both servers
+    try:
+        backend.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for proc in (frontend, backend):
+            _stop_tree(proc)
+
+
+def _interrupt(*_: object) -> None:
+    raise KeyboardInterrupt
+
+
+def _stop_tree(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False)
+    else:
+        os.killpg(proc.pid, signal.SIGTERM)
+    proc.wait()
+
+
 def bootstrap(args: argparse.Namespace) -> None:
     if not (ROOT / ".env").exists():
         env(args)
@@ -348,6 +446,7 @@ def main() -> None:
         ("lint", lint, "ruff check and format check"),
         ("history", history, "render docs/logs/results_ledger.jsonl as RESULTS_HISTORY.md"),
         ("diagrams", diagrams, "render docs/diagrams/*.puml to SVG and PNG (PlantUML in Docker)"),
+        ("run", run_app, "start backend and frontend: http://localhost:5173"),
     ]:
         sub.add_parser(name, help=doc).set_defaults(func=func)
     p_sim = sub.add_parser(
@@ -360,7 +459,18 @@ def main() -> None:
         "part", nargs="?", default="all", choices=["all", "analytics", "scripts", "backend", "frontend"]
     )
     p_test.set_defaults(func=test)
-    for name, func, doc in [("validate", validate, "validate a run"), ("eda", eda, "EDA figures for a run")]:
+    p_load = sub.add_parser("load", help="load the evidence run's app/ folder into the database")
+    p_load.add_argument("run", nargs="?", default=DEFAULT_RUN)
+    p_load.add_argument("--replace", action="store_true", help="replace previously loaded synthetic data")
+    p_load.set_defaults(func=load)
+    p_users = sub.add_parser("demo-users", help="create demo accounts; passwords go to .demo_credentials.txt")
+    p_users.add_argument("--reset", action="store_true", help="give existing demo users new passwords")
+    p_users.set_defaults(func=demo_users)
+    for name, func, doc in [
+        ("validate", validate, "validate a run"),
+        ("eda", eda, "EDA figures for a run"),
+        ("walkthrough", walkthrough, "prototype walkthrough: latency, accuracy vs truth, import cleaning"),
+    ]:
         p = sub.add_parser(name, help=doc)
         p.add_argument("run", nargs="?", default=DEFAULT_RUN)
         p.set_defaults(func=func)
