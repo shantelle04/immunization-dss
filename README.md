@@ -14,7 +14,8 @@ All child and facility operations data in this repository is **synthetic**, gene
 
 | Path | Contents |
 |---|---|
-| `analytics/` | Synthetic data generator (`immdss simulate`, `immdss validate-sim`) and, later, forecasting models |
+| `analytics/` | Synthetic data generator (`immdss simulate`, `immdss validate-sim`, `immdss eda`) and the forecasting pipeline (`immdss build-series`, `backtest`, `train-final`) |
+| `notebooks/` | `immdss_colab_pipeline.ipynb`: generation to trained models on Google Colab |
 | `backend/` | Django project and apps (accounts, facilities, passport, inventory, scheduling) |
 | `frontend/` | React application (inventory, scheduling, and child record dashboards) |
 | `data/` | Local data folders (not tracked); see `data/README.md` |
@@ -63,5 +64,9 @@ Placeholders are rejected: Django refuses to start, and the database container r
 | `simulate [--force]` | Generate the seeded synthetic dataset into `data/synthetic/` (about 70 s, one CPU core, about 0.7 GB RAM, low priority). Skipped in about 1 s when a validated run with the same seed, config and generator code exists |
 | `validate [run_dir]` | Run the 11 validation checks on a generated run |
 | `eda [run_dir]` | Exploratory figures and the dataset description for a validated run |
+
+## Model training (Google Colab only)
+
+Models are never trained on a development machine (D-14): `immdss backtest` and `immdss train-final` refuse to fit SARIMA or the GRU outside Colab. Open `notebooks/immdss_colab_pipeline.ipynb` in Colab (File > Open notebook > GitHub), set the runtime to GPU and run all cells. The notebook regenerates the identical synthetic data from seed 42, checks it against `analytics/configs/evidence_hashes.json`, and runs exploration, the rolling-origin backtest of all four models, the comparison, selection and final training. Details: `docs/12_DATA_TO_TRAINING_PIPELINE.md`.
 
 The database listens on `127.0.0.1:5433` (set `DB_PORT` in `.env` to change it). The application and the test suite connect with separate roles (`DB_USER`, `DB_TEST_USER`), created on first start by `backend/docker/initdb/01-roles.sh`.

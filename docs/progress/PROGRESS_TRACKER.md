@@ -11,7 +11,9 @@ My proposal is complete (draft 4), and I have moved into building the system. I 
 
 The main progress this week is the data. Requesting real survey microdata would have taken longer than my timeline allows, so, in line with my limitations section (1.7), I have built a **seeded synthetic dataset** for the whole project. It is calibrated so that its vaccination coverage matches Kenya's official figures from the Kenya Demographic and Health Survey 2022. The dataset is generated, it passes all 11 automatic quality checks, and anyone can regenerate the identical dataset from the same settings in about two minutes.
 
-Since the last update I have also frozen my requirements and drafted all the design diagrams and screen sketches from my proposal (section 5, Phase 2), so design is back on the September timeline of my Gantt chart, subject to your review. The project is saved in my private GitHub repository, and the first prototype starts on 5 October.
+Since the last update I have also frozen my requirements and drafted all the design diagrams and screen sketches from my proposal (section 5, Phase 2), so design is back on the September timeline of my Gantt chart, subject to your review.
+
+I have also built the first prototype ahead of plan: login with the three roles, the database loaded with the synthetic data, and first versions of the inventory, scheduling and child record screens, with 194 automated tests passing. I have started Phase 4: the forecasting pipeline and a Google Colab notebook that runs every step from data generation to model comparison are built and tested, and I will train the models on Colab with a GPU. No model has been trained yet. The project is in my GitHub repository, which I have made public so that Colab can use it; it holds no real data, secrets or passwords.
 
 # 2. Have I started cleaning the datasets?
 
@@ -197,13 +199,14 @@ While planning, I re-read my proposal and listed items to correct, including fou
 4. Could you confirm the dates for the system demonstration and the Chapter 4 to 6 submissions?
 5. In current Kenyan practice, may an opened 4-dose pneumococcal (PCV10) vial be used in later sessions, or is it discarded after 6 hours as the 2013 national guidelines state?
 6. My design diagrams are drawn with PlantUML (a text-based tool, so they stay consistent with the database design). Are these acceptable, or should I redraw them in StarUML or Visual Paradigm?
-7. Could you review my wireframes and design diagrams (attached) before I build the first prototype?
+7. Could you review my wireframes and design diagrams (attached)?
+8. For the model comparison, I propose testing on the last 24 weeks (6 periods of 4 weeks) instead of 26, and modelling yearly seasonality in SARIMA with Fourier terms because the standard 52-week seasonal term is too slow for 84 series. Are these acceptable?
 
-# 8. Next seven days (29 September to 5 October)
+# 8. Next seven days (30 September to 6 October)
 
 | Task | Output I will show you |
 |---|---|
-| Your review of requirements, diagrams and wireframes | Your feedback, recorded in my decision log |
-| Wireframe screenshots and diagrams prepared for Chapter 4 | Figures with captions |
-| Plan for the first prototype (login, database loaded with the synthetic data, three basic screens) | Plan and data model for your sign-off before building |
-| Start of the first prototype (5 October) | Login and database working with tests |
+| Run the Colab notebook: data check, exploration, backtest of the four models, comparison and selection | Comparison tables per vaccine and the training log entry |
+| Screenshots of every Prototype 1 screen for Chapter 4 | Figures with captions |
+| Gate review of Prototype 1 and tag it as version `p1` | Review notes and the tagged version |
+| Start of the stock-out alerts | Alert rules with tests |
