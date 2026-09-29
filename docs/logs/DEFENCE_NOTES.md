@@ -2,6 +2,25 @@
 
 Per phase: what was built, why, alternatives considered, weaknesses, and likely panel questions with answers.
 
+## Phase 4a: forecasting pipeline, built but not yet trained (2026-09-29)
+
+**What was built.** The code that turns the stock ledger into weekly series and compares four ways of forecasting them, plus one Colab notebook that runs every stage from data generation to the final models. Nothing has been trained: training runs only on Colab (D-14) and the commands refuse to fit a model anywhere else.
+
+**The series.** One per facility and vaccine (84), weekly doses issued from 4 January 2021 (260 weeks). Only the issues a clinic records are used; `truth/` is never read to build them. A week without issues is 0, and a week in which the ledger balance hit zero is flagged, because issues in that week understate demand (a child turned away is not an issue).
+
+**The comparison.** Seasonal naive (same week last year) and a 4-week moving average are the baselines any model must beat; SARIMA and a GRU are the candidates. Each is refitted at 6 cut-offs and forecasts the 4 weeks after each, so 24 weeks are scored and no test week is ever seen in training. MASE compares a model's error with the seasonal naive error on the training weeks: below 1 means the model is better than the simple rule.
+
+**Selection (D-21).** Per series: the GRU if it has at least 104 training weeks and beats seasonal naive; otherwise SARIMA; otherwise the better baseline.
+
+**Alternatives.** A single train and test split (one lucky or unlucky test period decides everything); training on the laptop (too little memory for TensorFlow, and the author ruled it out); SARIMA with a seasonal term at lag 52 (correct but slow for 84 series at 6 cut-offs, so seasonality is modelled with Fourier terms, D-36).
+
+**Weaknesses.** The data is simulated, so a model can learn the simulator's rules (R-02). Stock-out weeks censor demand; the bias against true demand is reported separately rather than hidden.
+
+**Likely questions**
+1. How do you know there is no leakage? (Every cut-off asserts that the last training week is before the first test week; scaling uses training weeks only; a test checks the cut-offs.)
+2. Why a global GRU instead of 84 small ones? (84 series of 260 weeks are short; one model shared across facilities and vaccines sees about 19,000 training windows instead of about 230.)
+3. Can someone reproduce your result? (Open the notebook in Colab at the tagged commit; it regenerates the identical data, checks every hash against `analytics/configs/evidence_hashes.json`, and records the git commit, seed, library versions and GPU in the manifest.)
+
 ## Phase 0: project skeleton and safe setup (2026-09-28)
 
 **What was built.** Three empty but working parts, each with a test: the analytics package (already had the data generator; now also the `immdss eda` command), a Django backend, and a React app. The database runs in Docker so the same setup works on Linux and Windows. One helper, `scripts/dev.py`, runs every common task with the same command on any operating system.

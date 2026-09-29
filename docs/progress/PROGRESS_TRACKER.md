@@ -2,7 +2,7 @@
 title: "Project Progress Report"
 subtitle: "A Web-Based Decision Support System for Healthcare Workers to Address Childhood Immunization Gaps through Predictive Analytics and Smart Scheduling"
 author: "Muthomi, Shantelle Nkatha (168873), BBIT 4D. Supervisor: Mr. Titus Tunduny"
-date: "Status as of 28 September 2026"
+date: "Status as of 29 September 2026"
 ---
 
 # 1. Summary
@@ -78,8 +78,8 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 | 0 | Setup | 28 to 30 Sep | Done (all tests pass; first upload pushed, commit a308e62) |
 | 1 | Synthetic data and exploration | 28 Sep to 9 Oct | In progress (dataset regenerated after D-18 and D-19 and validated; figures done; supervisor sign-off pending) |
 | 2 | Requirements and design | 29 Sep to 9 Oct | In progress (requirements frozen, all diagrams and wireframes drafted; supervisor review pending) |
-| 3 | Prototype 1: data layer and the three module screens | 5 to 18 Oct | Not started |
-| 4 | Model training and Prototype 2 | 12 to 25 Oct | Not started |
+| 3 | Prototype 1: data layer and the three module screens | 5 to 18 Oct | Built and tested ahead of plan (screenshots, gate review and `p1` tag pending) |
+| 4 | Model training and Prototype 2 | 12 to 25 Oct | In progress (training pipeline and Colab notebook built; no model trained yet) |
 | 5 | Refinement cycles and testing | 26 Oct to 6 Nov | Not started |
 | 6 | User acceptance testing and final system | 2 to 12 Nov | Not started |
 | 7 | Documentation (Chapters 4 to 6) | 5 Oct to 15 Nov | Not started |
@@ -128,7 +128,7 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 
 **Done:**
 
-- Froze my requirements: 26 functional and 11 non-functional requirements and 8 business rules, each linked to its evidence (my proposal, the Kenyan guidelines, WHO guidance or my data figures). Items that depend on an open decision are marked provisional.
+- Froze my requirements: 26 functional and 11 non-functional requirements and 9 business rules, each linked to its evidence (my proposal, the Kenyan guidelines, WHO guidance or my data figures). Items that depend on an open decision are marked provisional.
 - Confirmed decisions D-01 (Kenya, children under 2), D-06 (Jest tests) and D-08 (a dose is overdue 28 days after its due date), and chose PlantUML for diagrams (D-27).
 - Drew nine diagrams: use case, class, three sequence diagrams, activity, architecture, entity relationship diagram and logical database schema (the last one is asked for by the faculty Chapter 4 guide). The database diagrams and a data dictionary are generated from one file, so they always agree.
 - Made a table that links every requirement to its diagrams and planned tests.
@@ -140,13 +140,26 @@ I considered three options: requesting the Kenya DHS 2022 survey microdata, usin
 
 **What this phase is:** the first working version (proposal 3.2.1): login with roles, the database loaded with the synthetic data, and basic versions of the three dashboards.
 
-**Pending:** all. Starts 5 October.
+**Done:**
+
+- Built the backend (Django REST Framework) with login for the three roles, facility-restricted access, account lockout after 5 failed logins, and the database model generated from my single schema file. 188 backend tests pass, including a test of every endpoint against every role.
+- Built the first screens (React): login, inventory, scheduling, child records and user administration. 6 frontend tests pass.
+- Loaded the synthetic data into the database (60 seconds) and ran a scripted walkthrough: stock balances matched for 84 of 84 facility and vaccine pairs, child histories for 200 of 200 sampled children, and the CSV import caught 119 of 120 planted errors while rejecting 0 of 697 clean rows. The slowest page request took 326 ms (95th percentile).
+
+**Pending:** screenshots of every screen for Chapter 4, the gate review, and tagging the version as `p1`.
 
 ## Phase 4: Model training and Prototype 2
 
 **What this phase is:** training and comparing the forecasting models, then adding them to the system (proposal 3.2.2). I will compare the GRU model and ARIMA against two simple baselines, because a model is only useful if it beats the simple method a clinic could use without software. I will also build the stock-out alerts and the defaulter priority ranking (most missed doses first, then children closest to the upper age limit for a vaccine).
 
-**Pending:** all. Starts 12 October.
+**Done:**
+
+- Decided that all model training runs on Google Colab with a GPU, never on my laptop (D-14), and made the repository public so Colab can use it (D-34). The training commands refuse to run anywhere else.
+- Built the weekly training series from the stock ledger: 84 series (12 facilities x 7 vaccines) of 260 weeks, with stock-out weeks flagged from the ledger itself.
+- Wrote the backtest (6 rolling cut-offs over the last 24 weeks), the four models (seasonal naive, moving average, SARIMA and GRU), the accuracy measures and the rule that picks the best model per series. 11 new tests pass.
+- Wrote one Colab notebook that runs everything in order: data generation and a check that it is identical to my evidence dataset, validation, data exploration, training series, the model comparison, selection and the final models.
+
+**Pending:** running the notebook on Colab (no model has been trained yet), recording the results, the stock-out alerts and the Prototype 2 screens. Two choices for your review: a 24-week test period instead of 26 (D-35), and modelling yearly seasonality in SARIMA with Fourier terms (D-36).
 
 ## Phase 5: Refinement cycles and testing
 

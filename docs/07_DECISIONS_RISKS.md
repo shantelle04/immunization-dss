@@ -19,7 +19,7 @@ Status values: `Proposed` (recommendation, awaiting the author), `Decided`, `Sup
 | D-11 | Risk score | Optional tie-breaker trained on the synthetic registry's visit history (not on hidden truth); the proposal's priority rule stays primary | Proposed |
 | D-12 | UAT participants and ethics | 5 to 8 participants (healthcare workers or clinical students); confirm whether Strathmore ethics review is needed (VERIFY with supervisor) | Supervisor |
 | D-13 | Scheduling of forecast runs | Django management command via cron; no Celery | Proposed |
-| D-14 | Where to train | Options in doc 12: (A) all local; (B) baselines and SARIMA local, GRU on Google Colab, which clones the public repository (D-34) and rebuilds the identical data with the same commands and seed; (C) all on Colab. Recommendation: B (TensorFlow is heavy for this laptop; Colab gives a free GPU; results stay comparable) | Proposed |
+| D-14 | Where to train | All model fitting (SARIMA, GRU, final models) runs on Google Colab with a GPU, from the public repository (D-34); never on the development laptop. One notebook automates every stage: generation, validation, EDA, training series, backtests of all models, comparison, selection, packaging of results. The training commands refuse to run outside Colab (override only with IMMDSS_ALLOW_TRAINING=1 for another GPU host); local tests cover only the pure functions (series building, cleaning, splits, metrics, baselines) | Decided by author 2026-09-29 (option C) |
 | D-15 | Repository | Repo `github.com/shantelle04/immunization-dss` (private until D-34), remote over SSH (`git@github.com:shantelle04/immunization-dss.git`), key `id_ed25519_168873`, assistant guides never committed; docs committed since D-28. SSH authentication confirmed by the author 2026-09-28; nothing pushed yet | Decided |
 | D-16 | Real dates | Demo date, Chapter 4 to 6 deadlines, next supervisor meeting | Open (author) |
 | D-17 | AI-use disclosure | What the university policy requires | Open (author) |
@@ -40,6 +40,8 @@ Status values: `Proposed` (recommendation, awaiting the author), `Decided`, `Sup
 | D-32 | Clinical "today" | Setting `IMMDSS_TODAY` pins the clinical date to the synthetic dataset's as-of date (2025-12-29) for demos and tests; empty means the real date. Without it every child in the dataset would look months overdue | Decided by Claude under D-29; author to confirm |
 | D-33 | Default safety buffer (BR-05) | 0.25 (25%) for every facility and antigen until the facility manager sets its own (FR-14); ASSUMPTION, to be reviewed with the Phase 4 alert evaluation | Proposed |
 | D-34 | Repository visibility | Public, so Colab can clone it and rebuild the identical data (doc 12). Consequences accepted: commit email and all committed notes become public; AI guides, reference copies, data, secrets and demo credentials remain local. Can be made private again | Decided by author 2026-09-29 |
+| D-35 | Backtest length | 24 test weeks from 6 origins of 4 weeks, instead of the 26 weeks first written in doc 05, because 26 is not a multiple of the 4-week horizon; every test week is scored exactly once | Proposed |
+| D-36 | SARIMA seasonality | Yearly seasonality modelled with 2 Fourier harmonics as regressors (ARIMA with Fourier terms), chosen by AIC against the same orders without them, instead of a seasonal AR term at lag 52: state-space fits with a lag-52 seasonal term are slow enough that 84 series x 6 origins x the order grid would take hours (VERIFY: measured run time on Colab). Still a seasonal ARIMA-family model as named in the proposal | Proposed |
 
 ## 2. Risks
 
@@ -53,6 +55,7 @@ Status values: `Proposed` (recommendation, awaiting the author), `Decided`, `Sup
 | R-06 | Scope creep (offline sync, SMART Health Cards, SMS) | Medium | Medium | Scope guard in doc 10; stretch items only after p2 |
 | R-07 | Local-only files lost (reference PDFs, assistant files, local exclude list) | Low | Medium | Notes are versioned in the repository since D-28; the remaining local-only files are archived weekly (doc 08 section 5) |
 | R-08 | Supervisor expects real secondary datasets (proposal 3.3) | Medium | Medium | Raise D-02 at the next meeting with the calibration evidence; fallback: add open WHO/UNICEF coverage series as a context chart only |
+| R-09 | Colab library versions differ from the laptop and change the regenerated data | Medium | Medium | The notebook compares every file hash with `analytics/configs/evidence_hashes.json` and stops on a mismatch; a mismatched run is logged as a new run, never cited as the evidence run |
 
 ## 3. Open questions for the supervisor
 

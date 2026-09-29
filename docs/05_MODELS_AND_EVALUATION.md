@@ -6,17 +6,17 @@
 |---|---|
 | Series | Weekly doses administered per facility x antigen, from the app's stock issues (what a real system would see). True demand (including children turned away) exists only in `truth/weekly_stock.csv` and is used to evaluate, never to train |
 | Horizon | 1 to 4 weeks ahead (rolling 4-week forecast, proposal 2.5.1) |
-| Candidates | B1 seasonal naive (same week last year, or last 4-week mean when history is short); B2 moving average (proposal's comparison point); ARIMA/SARIMA (statsmodels, order by AIC on training window); GRU (Keras, global model across series, lookback 12 to 26 weeks, calendar and facility-level features) |
+| Candidates | B1 seasonal naive (same week last year, or last 4-week mean when history is short); B2 moving average of the last 4 weeks (proposal's comparison point); SARIMA (statsmodels; ARIMA orders (1,0,0), (0,1,1), (1,1,1), (2,0,1), each with and without 2 Fourier harmonics of the 52.18-week year for seasonality (D-36), chosen by AIC on the training window); GRU (Keras, one global model across all 84 series, lookback 26 weeks, inputs: scaled series, ledger stock-out flag, week-of-year sine and cosine, one-hot facility and antigen) |
 | Selection per series | GRU when the series has at least 104 weeks and beats B1 on its backtest; else SARIMA; if history is under 26 weeks, a population-based estimate (catchment births x schedule x coverage). Proposal says "ARIMA fallback for facilities with no history"; ARIMA cannot fit without history, so this is logged as D-21 |
-| Validation | Rolling-origin backtest over the last 26 weeks, refit every 4 weeks; scalers fit on training windows only |
-| Intervals | SARIMA native intervals; GRU via quantile loss or residual bootstrap |
+| Validation | Rolling-origin backtest: 6 origins of 4 weeks covering the last 24 weeks (D-35), every model refit at each origin on the weeks before it only; scalers fit on training windows only; GRU early stopping uses the last 15% of the training weeks as a time-based hold-out |
+| Intervals | 80% intervals: SARIMA native intervals; GRU from the quantile (pinball) loss at 0.1, 0.5 and 0.9; baselines from the 10th and 90th percentiles of in-sample residuals |
 
 **Metrics**
 
 | Metric | Formula | Notes |
 |---|---|---|
 | MAE | mean abs(y - yhat) | In doses |
-| MASE | MAE / MAE of seasonal naive in-sample | Under 1 means better than naive |
+| MASE | MAE over the 4 test weeks / mean abs(y_t - y_(t-52)) over that origin's training weeks; averaged over the 6 origins | Under 1 means better than the in-sample seasonal naive; undefined (reported as missing) if the training weeks repeat exactly |
 | sMAPE | mean 2 abs(y - yhat) / (abs(y) + abs(yhat)) | Plain MAPE is undefined at zero weeks |
 | Interval coverage | share of actuals inside the 80% interval | Calibration |
 

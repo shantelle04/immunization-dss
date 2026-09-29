@@ -26,7 +26,7 @@ All data is synthetic (D-02): simulated data is used because no facility-level d
 | 1 | Synthetic data and EDA | Done | doc 04, `evidence/EDA_sim-seed42-368707d3.md`, `logs/DATA_CLEANING_LOG.md` |
 | 2 | Requirements and design | Drafted, supervisor review pending | doc 02, `diagrams/`, `wireframes/` |
 | 3 | Prototype 1 | Built and tested; gate review, screenshots, merge and `p1` tag pending | branch `phase/3-prototype-1`, `evidence/P1_walkthrough_*.md` |
-| 4 | Models and Prototype 2 | **Not started: no model has been trained yet** | doc 12 stages 7 to 12 |
+| 4 | Models and Prototype 2 | In progress: training series, backtest, comparison and the Colab notebook built and tested locally; **no model has been trained yet** (training runs on Colab only, D-14) | branch `phase/4-models`, doc 12 stages 7 to 11, `notebooks/immdss_colab_pipeline.ipynb` |
 | 5 to 8 | Refinement and testing, user acceptance testing, documentation, demonstration | Not started | doc 01 |
 
 "Calibration" in Phase 1 adjusted the data generator until it matched published coverage figures. It is not model training.
@@ -178,7 +178,7 @@ Heavy commands run at low CPU priority with numeric libraries limited to one thr
 
 | File | Job |
 |---|---|
-| `cli.py` | the `immdss` command: `simulate`, `validate-sim`, `eda` |
+| `cli.py` | the `immdss` command: `simulate`, `validate-sim`, `eda`, `build-series`, `backtest`, `train-final` |
 | `sim/config.py` | reads and checks `sim.yaml`, listing every problem at once |
 | `sim/population.py` | facilities, births, child backgrounds in KDHS proportions |
 | `sim/behaviour.py` | attendance, dropout and lateness per child |
@@ -189,6 +189,15 @@ Heavy commands run at low CPU priority with numeric libraries limited to one thr
 | `sim/outputs.py` | writes the run folder and `manifest.json`; decides whether an identical run can be reused |
 | `sim/validate.py` | the 11 checks and the validation report |
 | `eda.py` | figures F-D1 to F-D8 and table T-5.1 |
+| `forecast/series.py` | weekly issues per facility and vaccine from the stock ledger, cleaning rules T-01 to T-03 (`build-series`) |
+| `forecast/metrics.py` | MAE, MASE, sMAPE, 80% interval coverage (doc 05) |
+| `forecast/models.py` | B1 seasonal naive, B2 moving average, SARIMA with Fourier seasonality (D-36) |
+| `forecast/gru.py` | the global GRU with quantile loss |
+| `forecast/backtest.py` | rolling-origin backtest, scoring, comparison, selection (D-21), bias against truth, final fit |
+| `forecast/guard.py` | refuses SARIMA and GRU fitting outside Google Colab (D-14; exit code 3) |
+| `forecast/commands.py` | the files each forecasting command writes |
+| `configs/evidence_hashes.json` | SHA-256 of every file of the evidence run and of its training series; Colab checks its regenerated data against it |
+| `../notebooks/immdss_colab_pipeline.ipynb` | the Colab notebook: generation to final models, one cell per stage (doc 12 stage 10) |
 | `configs/sim.yaml` | every generator setting (PUBLISHED or ASSUMPTION) |
 | `configs/evidence_run.txt` | which run the thesis cites |
 
@@ -268,5 +277,7 @@ The run folder (53 MB) stays on the machine and is never committed; `simulate` r
 | Prototype 1 walkthrough | yes |
 | Screenshots F-WF1 to F-WF4 and F-UI-* | author to capture |
 | Gate G3 review, merge, `p1` tag | pending author sign-off |
-| Training series, baselines, SARIMA, GRU, alerts | Phase 4 |
+| Training series, backtest and selection code, Colab notebook | built and tested locally |
+| Colab run: backtest of B1, B2, SARIMA, GRU; comparison; final models | author to run on Colab after the push |
+| Stock-out alerts, nightly forecast job, Prototype 2 screens | Phase 4, next |
 | Supervisor: D-02, D-07, D-12, D-25, D-27 | pending |

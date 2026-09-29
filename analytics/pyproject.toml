@@ -16,6 +16,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8,<9", "ruff>=0.6"]
+# Model fitting runs on Colab only (D-14); Colab already ships a compatible TensorFlow.
+train = ["statsmodels>=0.14,<0.15", "tensorflow>=2.16,<3"]
 
 [project.scripts]
 immdss = "immdss_analytics.cli:main"

@@ -1,6 +1,6 @@
 # 12. Data pipeline: from generation to trained models, in order
 
-What each stage does, which script runs it, where its output is stored, and what is still planned. Stages 1 to 6 are done and evidenced; stages 7 to 12 are the Phase 4 plan (nothing has been trained yet). Evidence run: `sim-seed42-368707d3`.
+What each stage does, which script runs it, where its output is stored, and what is still planned. Stages 1 to 6 are done and evidenced. Stages 7 and 8 are built and tested; stages 9 to 11 are built and run only on Google Colab (D-14) through `notebooks/immdss_colab_pipeline.ipynb`; nothing has been trained yet. Stage 12 is planned. Evidence run: `sim-seed42-368707d3`.
 
 **Basis for synthetic data (D-02).** No facility-level dataset of weekly vaccine stock and child vaccination records is publicly available for Kenya (KHIS and the logistics system need official access), and real child records would need ethics approval. Using simulated data where no dataset exists is allowed (confirmed by the author, 29 September 2026) and matches proposal 1.7 ("only simulated patient data will be used for development and testing").
 
@@ -14,11 +14,11 @@ What each stage does, which script runs it, where its output is stored, and what
 | 4 | Explore (EDA) | `python3 scripts/dev.py eda` | `docs/evidence/` (versioned) | Done: F-D1 to F-D8, T-5.1 |
 | 5 | Load into the system | `python3 scripts/dev.py load` | PostgreSQL, Docker volume `immdss_pgdata` | Done: 60 s |
 | 6 | Measure import cleaning | `python3 scripts/dev.py walkthrough` | `docs/evidence/P1_walkthrough_<run_id>.md` | Done: 119 of 120 caught |
-| 7 | Build training series | `immdss build-series` (planned) | `data/processed/<run_id>/` (local) | Phase 4 |
-| 8 | Clean the training series | inside stage 7 | same | Phase 4 |
-| 9 | Split for evaluation | inside stage 10 | none (rules only) | Phase 4 |
-| 10 | Train and backtest | `immdss backtest`, `immdss train` (planned) | `models/<run_id>/` (local) and the training log | Phase 4 |
-| 11 | Evaluate against truth | inside stage 10 | `docs/logs/TRAINING_RUN_LOG.md`, results ledger | Phase 4 |
+| 7 | Build training series | `immdss build-series` | `data/processed/<run_id>/` (local) or `results/series/` (Colab) | Built, tested |
+| 8 | Clean the training series | inside stage 7 | same | Built, tested |
+| 9 | Split for evaluation | inside stage 10 | none (rules only) | Built, tested |
+| 10 | Train and backtest | `immdss backtest`, `immdss train-final` (Colab only) | `results/` on Colab, downloaded as a zip; the training log | Built; not yet run |
+| 11 | Compare, select, evaluate against truth | inside stage 10 | same | Built; not yet run |
 | 12 | Use in the system | `manage.py run_forecasts` (planned, nightly) | Forecast and StockAlert tables | Phase 4 |
 
 ## Stage 1. Configure
@@ -63,50 +63,58 @@ What each stage does, which script runs it, where its output is stored, and what
 
 The system's CSV import rules (`backend/apps/analytics_api/services.py`) were written from the file format and the schedule, then scored against the answer key: 119 of 120 planted errors caught, 0 of 697 clean rows rejected. The one miss is a planted date that is itself valid (a day-month swap with a day of 12 or less); the generator will be corrected at the next regeneration.
 
-## Stage 7. Build the training series (planned)
+## Stage 7. Build the training series
 
 A forecast model learns weekly vaccine use. The series is built only from what a real clinic system records: the **issue** transactions in `app/stock_transactions.csv` (identical to the stock ledger in the database).
 
 - One series per facility and vaccine: 12 facilities x 7 vaccines = 84 series.
 - Weekly totals of doses issued, weeks starting Monday, 4 January 2021 to 29 December 2025 (260 weeks).
-- Saved as `data/processed/<run_id>/weekly_issues.parquet` with its own hash, so every training run can say exactly which data it used.
-- The same function builds the series from the database for the nightly job (stage 12); a test proves the two paths give identical series.
+- Saved as `weekly_issues.csv` (columns facility_code, antigen_code, week_start, issued, stockout_flag) with `series_manifest.json` (its SHA-256, counts of zero and stock-out weeks), so every training run can say exactly which data it used. For the evidence run: 84 series, 260 weeks, 1,635 stock-out-flagged weeks, 799 zero weeks; built in 2 seconds.
+- Code: `analytics/src/immdss_analytics/forecast/series.py`. It refuses a run that failed validation.
+- Planned for stage 12: the same function builds the series from the database for the nightly job, with a test that the two paths give identical series.
 
-## Stage 8. Clean the training series (planned)
+## Stage 8. Clean the training series
 
 | Rule | What it does | Why |
 |---|---|---|
 | T-01 | Weeks with no issues are 0, not missing | a week without vaccination is real information |
 | T-02 | Only weeks from 4 January 2021 (the stock window) | earlier history has no stock ledger |
 | T-03 | Flag stock-out weeks from the ledger itself (balance reached zero during the week) | during a stock-out, issues understate demand ("censored demand"); the flag is visible to a real system, unlike `truth/` |
-| T-04 | Flag supply-disruption weeks the same way | lets the report show accuracy with and without disrupted weeks |
+| T-04 | Accuracy is also reported without stock-out-flagged test weeks (`mae_no_stockout`) | shows how much censored weeks affect the score |
 | T-05 | No outlier removal without a logged rule | the synthetic data has no data-entry errors in `app/`; spikes are real catch-up demand |
 
 The cleaning rules are applied to the training window only, and any scaling for the GRU is fitted on training weeks only (no leakage).
 
-## Stage 9. Split for evaluation (planned)
+## Stage 9. Split for evaluation
 
-Rolling-origin backtest (doc 05 section 1): train on all weeks before a cut-off, forecast the next 4 weeks, move the cut-off forward 4 weeks, repeat over the last 26 weeks. Test weeks are always after the training weeks. The 2025 weeks are therefore never used to train the models that are scored on them.
+Rolling-origin backtest (doc 05 section 1, D-35): train on all weeks before a cut-off, forecast the next 4 weeks, move the cut-off forward 4 weeks; 6 cut-offs cover the last 24 weeks (7 July to 22 December 2025). Test weeks are always after the training weeks, and the code asserts it at every cut-off. Code: `forecast/backtest.py`.
 
-## Stage 10. Train and backtest (planned)
+## Stage 10. Train and backtest (Google Colab only, D-14)
 
-| Model | Library | Where it runs |
+| Model | Code | Library |
 |---|---|---|
-| B1 seasonal naive (same week last year) | numpy | local |
-| B2 moving average | numpy | local |
-| SARIMA | statsmodels | local |
-| GRU neural network (one model across all 84 series) | Keras with TensorFlow | local or Google Colab (decision D-14, below) |
+| B1 seasonal naive (same week last year) | `forecast/models.py` | numpy |
+| B2 moving average (last 4 weeks) | `forecast/models.py` | numpy |
+| SARIMA (ARIMA orders by AIC, Fourier yearly seasonality, D-36) | `forecast/models.py` | statsmodels |
+| GRU, one model across all 84 series, quantile loss | `forecast/gru.py` | Keras with TensorFlow |
 
-Every run writes a manifest (git commit, data hash, settings, seed, metrics) to `logs/TRAINING_RUN_LOG.md` and the results ledger. Trained files go to `models/<run_id>/` (local, not in git; they can be retrained from the logged settings).
+All fitting runs on Colab with a GPU. `immdss backtest` and `immdss train-final` refuse to fit SARIMA or the GRU anywhere else (exit code 3; `forecast/guard.py`). Only the pure functions are tested on the laptop (`analytics/tests/test_forecast.py`: series building and flags, metrics, baselines, cut-offs, scoring and selection, the refusal itself).
 
-**Google Colab route (if D-14 chooses it for the GRU).** The repository is public (D-34), so Colab can use it directly and no data needs uploading:
+**The notebook.** `notebooks/immdss_colab_pipeline.ipynb`, opened in Colab from GitHub (File > Open notebook > GitHub, `shantelle04/immunization-dss`), runtime set to GPU, then Run all. One cell per stage:
 
-1. Open `notebooks/train_gru_colab.ipynb` from GitHub in Colab.
-2. The notebook clones the repository at a fixed commit, installs the analytics package, and runs `immdss simulate` with the same seed, which rebuilds the identical dataset (the manifest hashes are checked). No child data, `truth/` file or secret is ever uploaded.
-3. It runs the **same** `immdss build-series`, `immdss backtest` and `immdss train` commands with the same seed, so a Colab result is comparable with a local one, and saves `results_<run_id>.zip` (trained model, manifest, metrics).
-4. Download it and run `immdss import-results`, which checks the hashes and writes the training log entry.
+1. Settings (repository, branch or tag, seed 42, models), Python and GPU check.
+2. Clone at the chosen branch, tag or commit (it stops if the checkout fails), install `analytics[dev,train]`, save `pip freeze`, run the unit tests.
+3. `immdss simulate --seed 42` and validation, then a check that every file is byte-identical to the evidence run (`analytics/configs/evidence_hashes.json`); it stops on any difference (R-09).
+4. `immdss eda`: figures F-D1 to F-D8 and table T-5.1, displayed.
+5. `immdss build-series`, with a hash check, then a series EDA: level, zero and stock-out shares, autocorrelation at lags 1, 4 and 52 per vaccine (T-M1), weekly totals (F-M1) and seasonality (F-M2).
+6. `immdss backtest` with B1 and B2 as a quick check, then with all four models (the run that counts).
+7. Comparison overall and per vaccine, selection per series (D-21), bias against true demand, and the MASE box plot (F-M3).
+8. `immdss train-final`: the selected model per series fitted on all 260 weeks, forecasting the next 4; the GRU is saved as `gru.keras`.
+9. Everything under `results/` is zipped as `results_<run_id>_<commit>.zip` and downloaded.
 
-## Stage 11. Evaluate against truth (planned)
+No data or secret is uploaded: Colab regenerates the data from the seed. The zip's `backtest/manifest.json` (git commit, series hash, seed, library versions, GPU) is what the training log entry cites.
+
+## Stage 11. Compare, select and evaluate against truth
 
 | Question | Compared with | Metric (doc 05) |
 |---|---|---|
@@ -121,12 +129,6 @@ Every run writes a manifest (git commit, data hash, settings, seed, metrics) to 
 
 A nightly job (`manage.py run_forecasts`, cron, D-13) builds the latest series from the database, loads the selected model per series (D-21), writes the 4-week forecasts and any stock-out alerts, and the inventory dashboard shows them with the model name and its backtest accuracy.
 
-## Decision needed: where to train the GRU (D-14)
+## Where training runs (D-14, decided)
 
-| Option | For | Against |
-|---|---|---|
-| A. Everything local | one environment; no uploads | TensorFlow adds about 600 MB to install and uses a lot of memory while training; this laptop had about 5.7 GB free |
-| B. Baselines and SARIMA local, GRU on Colab (recommended) | no heavy install locally; free GPU; the same commands and seed | an upload and download step per training run |
-| C. Everything on Colab | same as B for all models | slower iteration for the light models that run in seconds locally |
-
-Recommendation: B. Measure the first local SARIMA run time; if the GRU later proves light enough, option A remains available with no code change.
+Option C, everything on Google Colab, decided by the author on 29 September 2026: all model fitting runs on Colab, never on the development laptop, and the commands enforce it.
