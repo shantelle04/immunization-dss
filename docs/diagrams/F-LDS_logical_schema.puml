@@ -29,14 +29,14 @@ package "accounts" {
     facility_id : bigint <<FK>>
     * is_active : boolean
     * failed_logins : smallint
-    * locked_until : timestamptz
-    * last_login : timestamptz
+    locked_until : timestamptz
+    last_login : timestamptz
   }
   entity "accounts_auditlog" as auditlog {
     * id : bigint <<PK>>
     --
     * at : timestamptz
-    * user_id : bigint <<FK>>
+    user_id : bigint <<FK>>
     facility_id : bigint <<FK>>
     * action : varchar(32)
     * entity : varchar(48)
@@ -72,7 +72,7 @@ package "passport" {
     source_ref : varchar(16) <<UK>>
     * given_name : varchar(80)
     * family_name : varchar(80)
-    * sex : char(1)
+    * sex : varchar(1)
     * date_of_birth : date
     * caregiver_name : varchar(120)
     * registration_facility_id : bigint <<FK>>
@@ -131,9 +131,9 @@ package "inventory" {
     --
     * run_at : timestamptz
     * git_sha : varchar(40)
-    * data_sha256 : char(64)
+    * data_sha256 : varchar(64)
     * params : jsonb
-    * metrics : jsonb
+    metrics : jsonb
   }
   entity "inventory_forecast" as forecast {
     * id : bigint <<PK>>
@@ -161,7 +161,7 @@ package "inventory" {
     * safety_minimum : numeric(10,2)
     * status : varchar(16)
     acknowledged_by_id : bigint <<FK>>
-    * acknowledged_at : timestamptz
+    acknowledged_at : timestamptz
   }
 }
 package "scheduling" {
@@ -173,7 +173,7 @@ package "scheduling" {
     * date : date
     * kind : varchar(8)
     * location_name : varchar(120)
-    * capacity : integer
+    capacity : integer
     * status : varchar(8)
   }
   entity "scheduling_sessionplanitem" as sessionplanitem {
@@ -216,7 +216,7 @@ package "analytics_api" {
   }
 }
 facility |o--o{ user
-user ||--o{ auditlog
+user |o--o{ auditlog
 facility |o--o{ auditlog
 antigen ||--o{ scheduledose
 facility ||--o{ child
