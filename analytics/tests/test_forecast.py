@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from immdss_analytics.forecast import alerts, guard
 from immdss_analytics.forecast import backtest as bt
-from immdss_analytics.forecast import guard
 from immdss_analytics.forecast.guard import TrainingRefused
 from immdss_analytics.forecast.metrics import coverage, mae, mase, naive_scale, smape
 from immdss_analytics.forecast.models import fourier_terms, moving_average, seasonal_naive
@@ -144,5 +144,66 @@ def test_model_fitting_is_refused_off_colab(monkeypatch):
     with pytest.raises(TrainingRefused, match="Colab"):
         bt.run_backtest(_toy_series(), ["b1", "sarima"], seed=1)
     with pytest.raises(TrainingRefused):
-        selection = pd.DataFrame(columns=["facility_code", "antigen_code", "model"])
+        selection = pd.DataFrame(
+            [("F1", "BCG", "sarima")], columns=["facility_code", "antigen_code", "model"]
+        )
         bt.train_final(_toy_series(), selection, 1, None)
+
+
+def test_baseline_only_selection_forecasts_the_next_weeks_without_fitting(monkeypatch):
+    monkeypatch.delenv("IMMDSS_ALLOW_TRAINING", raising=False)
+    monkeypatch.setattr(guard.importlib.util, "find_spec", lambda name: None)
+    series = _toy_series()
+    selection = bt.compare(bt.score(bt.run_backtest(series, ["b1", "b2"], seed=1), series))[2]
+    final = bt.train_final(series, selection, 1, None)
+    assert len(final) == 4 * bt.HORIZON
+    last = series["week_start"].max()
+    assert pd.Timestamp(final["week_start"].min()) == last + pd.DateOffset(weeks=1)
+
+
+def test_replenishment_cover_and_first_breach():
+    on = dt.date(2025, 6, 2)
+    assert alerts.weeks_to_replenishment(dt.date(2025, 5, 19), 4, on, 4) == 2
+    assert alerts.weeks_to_replenishment(dt.date(2025, 4, 28), 4, on, 4) == 4, "late delivery: full horizon"
+    assert alerts.weeks_to_replenishment(None, 4, on, 4) == 4
+    assert alerts.first_breach(100, [10, 10, 10, 10], 10, 4, 0.25) is None
+    breach = alerts.first_breach(30, [10, 10, 10, 10], 10, 4, 0.25)
+    assert (breach.week_ahead, breach.projected_doses, breach.safety_minimum) == (1, 20, 37.5)
+    assert alerts.first_breach(30, [10, 10, 10, 10], 10, 1, 0.25) is None, "replenished after one week"
+    assert alerts.first_breach(5, [10, 10], 10, 1, 0.25).projected_doses == -5
+    assert alerts.usage_factor(10, 30) == 4.0 and alerts.usage_factor(0, 5) == 1.0
+
+
+def test_alert_decisions_use_only_data_before_the_origin_and_are_scored_against_truth():
+    weeks = pd.date_range("2025-01-06", periods=20, freq="W-MON")
+    origin = weeks[16]
+    ledger = pd.DataFrame(
+        [
+            ("2025-01-06", "F1", "BCG", "opening_balance", 200),
+            ("2025-01-06", "F2", "BCG", "opening_balance", 900),
+        ]
+        + [(str(w.date()), f, "BCG", "issue", -10) for w in weeks for f in ("F1", "F2")],
+        columns=["date", "facility_code", "antigen_code", "kind", "quantity_doses"],
+    )
+    forecasts = pd.DataFrame(
+        [
+            ("b2", f, "BCG", origin, origin + pd.DateOffset(weeks=h), h + 1, 10.0, 12.0)
+            for f in ("F1", "F2")
+            for h in range(4)
+        ],
+        columns=["model", "facility_code", "antigen_code", "origin_week", "week_start", "h", "yhat", "hi80"],
+    )
+    selection = pd.DataFrame(
+        [("F1", "BCG", "b2"), ("F2", "BCG", "b2")], columns=["facility_code", "antigen_code", "model"]
+    )
+    decisions = alerts.decide(ledger, forecasts, selection).set_index("facility_code")
+    assert decisions.loc["F1", "stock_doses"] == 40 and decisions.loc["F2", "stock_doses"] == 740
+    assert bool(decisions.loc["F1", "alert"]) and not bool(decisions.loc["F2", "alert"])
+    truth = pd.DataFrame(
+        [("F1", "BCG", origin + pd.DateOffset(weeks=h), max(40 - 10 * (h + 1), 0), h >= 3) for h in range(4)]
+        + [("F2", "BCG", origin + pd.DateOffset(weeks=h), 700, False) for h in range(4)],
+        columns=["facility_code", "antigen_code", "week_start", "closing_doses", "stockout"],
+    )
+    _, summary = alerts.evaluate(decisions.reset_index(), truth)
+    assert summary["alerts"] == 1 and summary["recall"] == 1.0 and summary["precision"] == 1.0
+    assert summary["mean_lead_time_weeks"] == 4.0

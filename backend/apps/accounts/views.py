@@ -3,7 +3,10 @@ import contextlib
 from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models import Count
 from django.middleware.csrf import get_token
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.authentication import CSRFCheck
 from rest_framework.exceptions import AuthenticationFailed, PermissionDenied
@@ -16,6 +19,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.facilities.models import Facility
+from apps.inventory.models import ForecastRun
 
 from .models import AuditAction, AuditLog, Role, User
 from .permissions import FacilityScopedQuerysetMixin, IsFacilityManager, IsSystemAdmin
@@ -179,6 +183,79 @@ class UserAdminListView(ListAPIView):
         user = data.save()
         audit(request.user, AuditAction.CREATE, "user", user.pk, facility=user.facility)
         return Response(UserSerializer(user).data, status=status.HTTP_201_CREATED)
+
+
+class UserUpdateSerializer(serializers.Serializer):
+    is_active = serializers.BooleanField(required=False)
+    password = serializers.CharField(
+        required=False, min_length=12, max_length=256, trim_whitespace=False, write_only=True
+    )
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("Nothing to change.")
+        if "password" in attrs:
+            try:
+                validate_password(attrs["password"], self.context["target"])
+            except DjangoValidationError as exc:
+                raise serializers.ValidationError({"password": list(exc.messages)}) from exc
+        return attrs
+
+
+class UserAdminDetailView(APIView):
+    """Deactivate or reactivate an account, clear its lockout, or set a new password (FR-03)."""
+
+    permission_classes = [IsSystemAdmin]
+
+    def patch(self, request, pk):
+        target = get_object_or_404(User.objects.select_related("facility"), pk=pk)
+        data = UserUpdateSerializer(data=request.data, context={"target": target})
+        data.is_valid(raise_exception=True)
+        v = data.validated_data
+        if v.get("is_active") is False and target.pk == request.user.pk:
+            raise serializers.ValidationError({"is_active": "You cannot deactivate your own account."})
+        if "is_active" in v:
+            target.is_active = v["is_active"]
+        if "password" in v:
+            target.set_password(v["password"])
+        target.failed_logins = 0
+        target.locked_until = None
+        target.save()
+        audit(request.user, AuditAction.UPDATE, "user", target.pk, facility=target.facility)
+        return Response(UserSerializer(target).data)
+
+
+class AdminOverviewView(APIView):
+    """System status for the administrator: accounts, facilities, the forecast job. No clinical data."""
+
+    permission_classes = [IsSystemAdmin]
+
+    def get(self, request):
+        week_ago = timezone.now() - timezone.timedelta(days=7)
+        run = ForecastRun.objects.order_by("-run_at").first()
+        recent = AuditLog.objects.filter(at__gte=week_ago)
+        return Response(
+            {
+                "users_by_role": dict(User.objects.values_list("role").annotate(n=Count("id"))),
+                "users_inactive": User.objects.filter(is_active=False).count(),
+                "users_locked": User.objects.filter(locked_until__gt=timezone.now()).count(),
+                "facilities": Facility.objects.count(),
+                "logins_7_days": recent.filter(action=AuditAction.LOGIN).count(),
+                "failed_logins_7_days": recent.filter(action=AuditAction.LOGIN_FAILED).count(),
+                "lockouts_7_days": recent.filter(action=AuditAction.LOCKOUT).count(),
+                "forecast_run": (
+                    {
+                        "run_at": run.run_at,
+                        "source": run.params.get("source"),
+                        "as_of": run.params.get("as_of"),
+                        "series": run.params.get("series"),
+                        "models": run.params.get("models"),
+                    }
+                    if run
+                    else None
+                ),
+            }
+        )
 
 
 class AuditEntrySerializer(serializers.ModelSerializer):

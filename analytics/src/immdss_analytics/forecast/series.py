@@ -61,12 +61,22 @@ def build_weekly_series(ledger: pd.DataFrame, start: dt.date, end: dt.date) -> p
     return frame[SERIES_COLUMNS]
 
 
+def series_csv(frame: pd.DataFrame) -> bytes:
+    """The canonical CSV bytes of a series; its SHA-256 identifies the training data."""
+    out = frame.assign(week_start=frame["week_start"].dt.date.astype(str))
+    return out.to_csv(index=False, lineterminator="\n").encode()
+
+
+def series_sha256(frame: pd.DataFrame) -> str:
+    return hashlib.sha256(series_csv(frame)).hexdigest()
+
+
 def write_series(frame: pd.DataFrame, path: Path) -> str:
     """Write the series as CSV and return its SHA-256, which every training manifest cites."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    out = frame.assign(week_start=frame["week_start"].dt.date.astype(str))
-    out.to_csv(path, index=False, lineterminator="\n")
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    data = series_csv(frame)
+    path.write_bytes(data)
+    return hashlib.sha256(data).hexdigest()
 
 
 def read_series(path: Path) -> pd.DataFrame:

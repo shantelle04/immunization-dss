@@ -1,5 +1,5 @@
-"""Prototype walkthrough (proposal 3.2.2): retrieval latency, query accuracy against simulator truth, and
-import-cleaning scores against the planted-defect answer key.
+"""Prototype walkthrough (proposal 3.2.2): retrieval latency, query accuracy against simulator truth, the
+defaulter oracle, and import-cleaning scores against the planted-defect answer key.
 
 Evaluation only: this package is not an installed app and has no URL, so truth/ never reaches the API or UI.
 Everything it does inside the database is rolled back.
@@ -21,6 +21,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 import django
+import pandas as pd
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
 django.setup()
@@ -33,8 +34,12 @@ from apps.accounts.models import Role, User  # noqa: E402
 from apps.analytics_api.services import Reference, validate_immunizations, validate_stock  # noqa: E402
 from apps.common import today  # noqa: E402
 from apps.facilities.models import Facility  # noqa: E402
+from apps.inventory import forecasting  # noqa: E402
+from apps.inventory.models import ForecastRun  # noqa: E402
 from apps.inventory.services import balance  # noqa: E402
 from apps.passport.models import Antigen, Child  # noqa: E402
+
+from . import defaulter_oracle  # noqa: E402
 
 SEED = 20260929
 CHILD_SAMPLE = 200
@@ -58,6 +63,10 @@ def latency(clients: dict[str, APIClient], children: list[Child]) -> list[dict]:
         "defaulter list": lambda c, _: c.get("/api/v1/defaulters"),
         "child history": lambda c, ch: c.get(f"/api/v1/children/{ch.pk}/immunizations"),
         "child search": lambda c, ch: c.get("/api/v1/children/search", {"system_id": ch.system_id}),
+        "child FHIR export": lambda c, ch: c.get(f"/api/v1/children/{ch.pk}/fhir"),
+        "overview": lambda c, _: c.get("/api/v1/dashboard"),
+        "forecasts": lambda c, _: c.get("/api/v1/forecasts"),
+        "alerts": lambda c, _: c.get("/api/v1/alerts"),
     }
     by_facility = defaultdict(list)
     for child in children:
@@ -123,8 +132,70 @@ def accuracy(run_dir: Path, clients: dict[str, APIClient], children: list[Child]
             "exact": int(Child.objects.count() == truth_registered),
         }
     )
+    rows += defaulter_checks(run_dir, clients)
+    rows += forecast_checks(run_dir)
     for row in rows:
         row["accuracy_pct"] = round(100 * row["exact"] / row["checked"], 2)
+    return rows
+
+
+def defaulter_checks(run_dir: Path, clients: dict[str, APIClient]) -> list[dict]:
+    """The API defaulter list against the independent oracle, for every facility (doc 05 section 3)."""
+    frames = defaulter_oracle.load(run_dir)
+    children = status_ok = doses_ok = facilities_ranked = 0
+    under_two = frames[0][
+        (pd.Timestamp(today()) - frames[0]["date_of_birth"]).dt.days.between(
+            0, defaulter_oracle.LIST_UNDER_DAYS - 1
+        )
+    ]
+    for code, client in clients.items():
+        oracle = defaulter_oracle.expected(*frames, code, today())
+        api = [
+            (d["system_id"], sorted(d["overdue"])) for d in client.get("/api/v1/defaulters").data["results"]
+        ]
+        want, got = dict(oracle), dict(api)
+        for system_id in under_two.loc[under_two["registration_facility_code"] == code, "system_id"]:
+            children += 1
+            status_ok += (system_id in want) == (system_id in got)
+            doses_ok += want.get(system_id) == got.get(system_id)
+        facilities_ranked += [s for s, _ in oracle] == [s for s, _ in api]
+    return [
+        {"query": "defaulter status vs oracle (children under 2)", "checked": children, "exact": status_ok},
+        {"query": "overdue dose list vs oracle (children under 2)", "checked": children, "exact": doses_ok},
+        {
+            "query": "defaulter rank order vs oracle (facilities)",
+            "checked": len(clients),
+            "exact": facilities_ranked,
+        },
+    ]
+
+
+def forecast_checks(run_dir: Path) -> list[dict]:
+    """7. The series the application builds from its database equals the training series, byte for byte."""
+    reference = run_dir.parents[2] / "analytics" / "configs" / "evidence_hashes.json"
+    if not reference.exists():
+        return []
+    wanted = json.loads(reference.read_text())
+    if wanted["run_id"] != run_dir.name:
+        return []
+    series = forecasting.weekly_series(forecasting.ledger_frame(), today())
+    same = forecasting.series_sha256(series) == wanted["weekly_issues_sha256"]
+    rows = [
+        {
+            "query": "weekly series from the database vs training series (SHA-256)",
+            "checked": 1,
+            "exact": int(same),
+        }
+    ]
+    run = ForecastRun.objects.order_by("-run_at").first()
+    if run:
+        rows.append(
+            {
+                "query": "latest forecast run used that series",
+                "checked": 1,
+                "exact": int(run.data_sha256 == wanted["weekly_issues_sha256"]),
+            }
+        )
     return rows
 
 

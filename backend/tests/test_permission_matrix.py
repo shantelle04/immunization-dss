@@ -38,6 +38,22 @@ MATRIX = {
     ("admin-users", "get"): {SA},
     ("admin-users", "post"): {SA},
     ("admin-facilities", "get"): {SA},
+    ("child-fhir", "get"): CLINICAL,
+    ("dashboard", "get"): CLINICAL,
+    ("stock-policies", "get"): CLINICAL,
+    ("stock-policy", "get"): CLINICAL,
+    ("stock-policy", "put"): {FM},
+    ("forecasts", "get"): CLINICAL,
+    ("alerts", "get"): CLINICAL,
+    ("alert-acknowledge", "post"): {FM},
+    ("session-detail", "get"): CLINICAL,
+    ("session-plan", "post"): {FM},
+    ("session-attendance", "post"): CLINICAL,
+    ("admin-overview", "get"): {SA},
+    ("admin-user", "patch"): {SA},
+    ("admin-facilities", "post"): {SA},
+    ("admin-schedule", "get"): {SA},
+    ("admin-schedule-dose", "patch"): {SA},
 }
 
 
@@ -58,7 +74,8 @@ def test_every_route_is_in_the_matrix():
 
 
 def _url(pattern: str, child: Child) -> str:
-    return "/" + pattern.replace("<uuid:pk>", str(child.pk))
+    filled = pattern.replace("<uuid:pk>", str(child.pk)).replace("<int:pk>", "1")
+    return "/" + filled.replace("<str:code>", "BCG").replace("<str:dose_code>", "BCG-1")
 
 
 CASES = [(name, method, role) for (name, method) in MATRIX for role in (HCW, FM, SA, ANON)]

@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from .eda import run_eda
-from .forecast.commands import build_series, run_backtests, train_final
+from .forecast.commands import build_series, evaluate_alerts, run_backtests, train_final
 from .forecast.guard import TrainingRefused
 from .sim.calibrate import calibrate, refine
 from .sim.config import ConfigError, load_config, parse_config
@@ -111,6 +111,11 @@ def main(argv: list[str] | None = None) -> int:
     p_final.add_argument("--series", type=Path, required=True)
     p_final.add_argument("--results", type=Path, required=True)
     p_final.add_argument("--seed", type=int, default=42)
+    p_alerts = sub.add_parser(
+        "evaluate-alerts", help="stock-out alert precision and recall against ground truth for a backtest"
+    )
+    p_alerts.add_argument("run_dir", type=Path)
+    p_alerts.add_argument("--results", type=Path, required=True)
     args = parser.parse_args(argv)
 
     try:
@@ -124,6 +129,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "backtest":
             run_backtests(args.run_dir, args.series, args.models.split(","), args.seed, args.out)
+            return 0
+        if args.command == "evaluate-alerts":
+            evaluate_alerts(args.run_dir, args.results)
             return 0
         if args.command == "train-final":
             train_final(args.series, args.results, args.seed)

@@ -162,10 +162,14 @@ def compare(metrics: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataF
 
     overall = summary(metrics, ["model"]).sort_values("mean_mase").reset_index(drop=True)
     per_vaccine = summary(metrics, ["antigen_code", "model"]).sort_values(["antigen_code", "mean_mase"])
-    wide = metrics.pivot_table(index=KEY, columns="model", values="mase")
+    wide = metrics.set_index([*KEY, "model"])["mase"].unstack("model")
+    wide_mae = metrics.set_index([*KEY, "model"])["mae"].unstack("model")
     weeks = metrics.groupby(KEY)["min_train_weeks"].min()
     choices = []
     for key, row in wide.iterrows():
+        if row.isna().all():
+            # MASE is undefined with less than a season of training weeks; models are then compared on MAE.
+            row = wide_mae.loc[key]
         if "gru" in row and weeks[key] >= MIN_WEEKS_FOR_GRU and row["gru"] < row.get("b1", np.inf):
             chosen, reason = "gru", "GRU beats seasonal naive with enough history"
         elif "sarima" in row and np.isfinite(row["sarima"]):
@@ -244,11 +248,13 @@ def manifest(series_sha: str, run_id: str, models: list[str], seed: int, repo: P
 
 def train_final(series: pd.DataFrame, selection: pd.DataFrame, seed: int, out: Path) -> pd.DataFrame:
     """Fit each series' selected model on all weeks and forecast the next HORIZON weeks; the GRU is saved to
-    `out`, SARIMA orders are kept in the `detail` column (a refit from them is fast)."""
-    require_training_host("Final training")
+    `out`, SARIMA orders are kept in the `detail` column (a refit from them is fast). A selection made only
+    of baselines fits nothing and runs anywhere."""
+    chosen = {(r.facility_code, r.antigen_code): r.model for r in selection.itertuples()}
+    if FITTED & set(chosen.values()):
+        require_training_host("Final training")
     weeks = pd.DatetimeIndex(sorted(series["week_start"].unique()))
     grouped = _grouped(series)
-    chosen = {(r.facility_code, r.antigen_code): r.model for r in selection.itertuples()}
     future = pd.date_range(weeks[-1], periods=HORIZON + 1, freq="W-MON")[1:]
     rows = []
     for model in sorted(set(chosen.values())):

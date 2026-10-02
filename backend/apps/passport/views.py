@@ -1,4 +1,5 @@
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from rest_framework import serializers, status
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.generics import ListAPIView
@@ -6,13 +7,13 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from apps.accounts.models import AuditAction
-from apps.accounts.permissions import FacilityScopedQuerysetMixin, IsClinical
+from apps.accounts.permissions import FacilityScopedQuerysetMixin, IsClinical, IsSystemAdmin
 from apps.accounts.services import audit
 from apps.common import today
 from apps.inventory.models import VaccineLot
 from apps.inventory.services import StockRefused
 
-from . import services
+from . import fhir, services
 from .models import Child, ScheduleDose, Sex
 
 
@@ -159,6 +160,16 @@ class ChildImmunizationsView(APIView):
                     for s in statuses
                     if s.state != services.DoseState.GIVEN
                 ],
+                "schedule": [
+                    {
+                        "dose_code": s.dose_code,
+                        "antigen": s.antigen,
+                        "state": s.state,
+                        "due_date": s.due_date,
+                        "given_on": s.given_on,
+                    }
+                    for s in statuses
+                ],
             }
         )
 
@@ -202,3 +213,65 @@ class ScheduleView(APIView):
                 )
             )
         )
+
+
+class ChildFhirView(APIView):
+    """FHIR R4 Bundle of the child record (FR-34); every export is audited, cross-facility ones flagged."""
+
+    permission_classes = [IsClinical]
+
+    def get(self, request, pk):
+        child = _child_for(request, pk)
+        cross = child.registration_facility_id != request.user.facility_id
+        audit(request.user, AuditAction.EXPORT, "child_fhir", child.pk, cross_facility=cross)
+        response = Response(fhir.bundle(child, timezone.now()), content_type="application/fhir+json")
+        response["Content-Disposition"] = f'attachment; filename="{child.system_id}.fhir.json"'
+        return response
+
+
+class ScheduleDoseSerializer(serializers.ModelSerializer):
+    antigen = serializers.CharField(source="antigen.code", read_only=True)
+
+    class Meta:
+        model = ScheduleDose
+        fields = [
+            "dose_code",
+            "antigen",
+            "dose_number",
+            "recommended_age_days",
+            "min_age_days",
+            "max_age_days",
+            "min_interval_days",
+        ]
+        read_only_fields = ["dose_code", "antigen", "dose_number"]
+
+    def validate(self, attrs):
+        merged = {f: attrs.get(f, getattr(self.instance, f)) for f in self.Meta.fields[3:]}
+        if any(v < 0 or v > 3650 for v in merged.values()):
+            raise serializers.ValidationError("Ages and intervals are in days, between 0 and 3650.")
+        if not merged["min_age_days"] <= merged["recommended_age_days"] <= merged["max_age_days"]:
+            raise serializers.ValidationError(
+                "Minimum age, recommended age and maximum age must be in order."
+            )
+        return attrs
+
+
+class ScheduleAdminListView(ListAPIView):
+    """The vaccine schedule as configuration, for the system administrator (FR-03)."""
+
+    permission_classes = [IsSystemAdmin]
+    serializer_class = ScheduleDoseSerializer
+    pagination_class = None
+    queryset = ScheduleDose.objects.select_related("antigen")
+
+
+class ScheduleAdminDetailView(APIView):
+    permission_classes = [IsSystemAdmin]
+
+    def patch(self, request, dose_code):
+        dose = get_object_or_404(ScheduleDose.objects.select_related("antigen"), dose_code=dose_code)
+        data = ScheduleDoseSerializer(dose, data=request.data, partial=True)
+        data.is_valid(raise_exception=True)
+        data.save()
+        audit(request.user, AuditAction.UPDATE, "schedule_dose", dose.pk)
+        return Response(data.data)

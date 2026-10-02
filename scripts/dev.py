@@ -336,7 +336,7 @@ def demo_users(args: argparse.Namespace) -> None:
 
 
 def walkthrough(args: argparse.Namespace) -> None:
-    out = ROOT / "docs" / "evidence" / f"P1_walkthrough_{Path(args.run).name}.md"
+    out = ROOT / "docs" / "evidence" / f"P{args.prototype}_walkthrough_{Path(args.run).name}.md"
     result = run(
         PY,
         "-m",
@@ -361,6 +361,61 @@ def walkthrough(args: argparse.Namespace) -> None:
     record("walkthrough", [result], details)
     if result.code:
         sys.exit(result.code)
+
+
+def forecasts(args: argparse.Namespace) -> None:
+    """Store 4-week forecasts and refresh alerts: baselines, or the results folder of a Colab run."""
+    cmd = [PY, "manage.py", "run_forecasts"] + (["--results", ROOT / args.results] if args.results else [])
+    result = run(*cmd, cwd=ROOT / "backend", heavy=True, exit_on_error=False, extra_env=_clinical_env())
+    details: dict = {"seconds": round(result.seconds, 1)}
+    if result.code == 0:
+        data = json.loads(result.output[result.output.index("{") :])
+        keys = ("source", "series", "weeks", "models", "forecasts", "alerts_active", "data_sha256")
+        details.update({k: data.get(k) for k in keys})
+    record("forecasts", [result], details)
+    if result.code:
+        sys.exit(result.code)
+
+
+def evaluate_models(args: argparse.Namespace) -> None:
+    """Baseline backtest and stock-out alert evaluation against ground truth (no model is fitted)."""
+    run_dir = ROOT / args.run
+    out = ROOT / "data" / "results" / f"{run_dir.name}-baselines"
+    steps = [
+        run(
+            tool("immdss"), "build-series", run_dir, "--out", ROOT / "data" / "processed", exit_on_error=False
+        ),
+        run(
+            tool("immdss"),
+            "backtest",
+            run_dir,
+            "--series",
+            ROOT / "data" / "processed" / run_dir.name / "weekly_issues.csv",
+            "--models",
+            "b1,b2",
+            "--out",
+            out,
+            heavy=True,
+            exit_on_error=False,
+        ),
+        run(tool("immdss"), "evaluate-alerts", run_dir, "--results", out, exit_on_error=False),
+    ]
+    details: dict = {"results": str(out.relative_to(ROOT))}
+    if all(r.code == 0 for r in steps):
+        manifest = json.loads((out / "manifest.json").read_text())
+        alerts = json.loads((out / "alert_metrics.json").read_text())
+        details["series_sha256"] = manifest["series_sha256"]
+        details["backtest"] = {
+            r["model"]: {k: r[k] for k in ("mean_mase", "mean_mae", "mean_smape", "coverage80")}
+            for r in manifest["overall"]
+        }
+        details["alerts"] = {
+            k: alerts[k] for k in ("alerts", "true_stockout_weeks", "recall", "precision", "f1", "buffer")
+        }
+        details["alert_sensitivity"] = alerts["sensitivity"]
+    record("evaluate", steps, details)
+    if any(r.code for r in steps):
+        sys.exit(1)
 
 
 def run_app(_: argparse.Namespace) -> None:
@@ -466,13 +521,19 @@ def main() -> None:
     p_users = sub.add_parser("demo-users", help="create demo accounts; passwords go to .demo_credentials.txt")
     p_users.add_argument("--reset", action="store_true", help="give existing demo users new passwords")
     p_users.set_defaults(func=demo_users)
+    p_fc = sub.add_parser("forecasts", help="store forecasts and refresh stock-out alerts in the database")
+    p_fc.add_argument("--results", help="results folder of a Colab training run; default: baselines only")
+    p_fc.set_defaults(func=forecasts)
     for name, func, doc in [
         ("validate", validate, "validate a run"),
         ("eda", eda, "EDA figures for a run"),
         ("walkthrough", walkthrough, "prototype walkthrough: latency, accuracy vs truth, import cleaning"),
+        ("evaluate", evaluate_models, "baseline backtest and alert precision/recall against ground truth"),
     ]:
         p = sub.add_parser(name, help=doc)
         p.add_argument("run", nargs="?", default=DEFAULT_RUN)
+        if name == "walkthrough":
+            p.add_argument("--prototype", type=int, default=2, help="prototype number for the report name")
         p.set_defaults(func=func)
     args = parser.parse_args()
     args.func(args)
