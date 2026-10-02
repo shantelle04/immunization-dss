@@ -65,27 +65,28 @@ Data-cleaning metric: import validation scored against `imports/import_dirty_tru
 
 ## 6. Results so far (evidence run `sim-seed42-368707d3`)
 
-Every number below is from a logged run: results ledger entries `evaluate` and `walkthrough` at commit `855d49a`, files in `data/results/sim-seed42-368707d3-baselines/`, training series SHA-256 `279617cf49ee...`. SARIMA and the GRU have not been run yet (Colab, D-14).
+Every number below is from a logged run. Baselines: results ledger entries `evaluate` and `walkthrough` at commit `855d49a`, files in `data/results/sim-seed42-368707d3-baselines/`. All four models: Colab run at commit `ff1ff0b` (Tesla T4), full tables in `docs/evidence/M1_model_comparison_sim-seed42-368707d3.md`. Training series SHA-256 `279617cf49ee...` in both.
 
-**Forecast backtest, baselines (84 series, 6 origins, last 24 weeks)**
+**Forecast backtest, all models (84 series, 6 origins, last 24 weeks; Colab `ff1ff0b`)**
 
 | Model | Mean MASE | Median MASE | Series beating seasonal naive | Mean MAE (doses/week) | Mean sMAPE | 80% interval coverage |
 |---|---|---|---|---|---|---|
+| GRU (global) | 0.677 | 0.636 | 96.4% | 4.11 | 0.341 | 0.786 |
+| SARIMA (Fourier, D-36) | 0.681 | 0.640 | 96.4% | 4.17 | 0.338 | 0.844 |
 | B2 moving average (4 weeks) | 0.766 | 0.724 | 90.5% | 4.69 | 0.375 | 0.812 |
 | B1 seasonal naive | 0.950 | 0.934 | 64.3% | 5.86 | 0.493 | 0.842 |
 
-Bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/week in normal weeks and -0.39 in stock-out weeks; B1 -1.10 and -2.25. Selection (D-21 fallback, no SARIMA or GRU yet): B2 for 64 series, B1 for 20.
+The GRU and SARIMA are close: the GRU has the lower MASE overall and for PCV, PENTA and IPV, SARIMA for BCG, MR, OPV and ROTA, and the GRU beats SARIMA on 42 of 84 series. The GRU's 80% interval is too narrow (coverage 0.786 below 0.80). Bias against true demand: GRU -1.05 doses/week in normal weeks and -1.33 in stock-out weeks; SARIMA -0.95 and -1.33. Selection by D-21: GRU for 80 series, SARIMA for 4. Run time on Colab: SARIMA 849 s, GRU 158 s for 6 fits each.
 
-**Stock-out alerts with the selected baseline (D-38, buffer 0.25)**
+Baseline bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/week in normal weeks and -0.39 in stock-out weeks; B1 -1.10 and -2.25.
 
-| Measure | Value | D-07 target |
-|---|---|---|
-| Recall (true stock-out weeks alerted within 4 weeks) | 0.914 (181 of 198) | at least 0.95: **not met** |
-| Precision (stock-out or below minimum) | 0.586 | reported |
-| Strict precision (stock-out only) | 0.359 | reported |
-| F1 | 0.714 | reported |
-| Mean lead time | 2.15 weeks | reported |
+**Stock-out alerts (D-38, buffer 0.25, 504 decisions, 198 true stock-out weeks)**
 
-Sensitivity to the buffer (not a tuned result; the reported value uses D-33): 0.0 gives recall 0.914, precision 0.483; 0.5 gives recall 0.919, precision 0.729. Recall per vaccine ranges from 0.818 (OPV) to 0.978 (MR). The Colab models may change these figures; both will be reported.
+| Forecasts used by the rule | Recall | Precision | Strict precision | F1 | Mean lead time | D-07 recall target 0.95 |
+|---|---|---|---|---|---|---|
+| D-21 selection (GRU 80, SARIMA 4) | 0.843 (167) | 0.640 | 0.379 | 0.728 | 2.04 weeks | **not met** |
+| Baseline selection (B2 64, B1 20) | 0.914 (181) | 0.586 | 0.359 | 0.714 | 2.15 weeks | **not met** |
+
+The more accurate forecasts give fewer alerts and lower recall, because the rule uses the upper bound of the 80% interval and the GRU's interval is narrower (coverage 0.786). With the D-21 selection, recall per vaccine ranges from 0.636 (OPV) to 0.909 (IPV); a buffer of 0.5 gives recall 0.899 and precision 0.778 (sensitivity only; the reported value uses D-33). Which forecasts the alert rule should use is an open decision (D-41).
 
 **Defaulter categorisation (oracle, doc 05 section 3)**: 10,390 children under 2 across 12 facilities; defaulter status and overdue dose list match the independent oracle for 10,390 of 10,390 (100%); rank order matches for 12 of 12 facilities.

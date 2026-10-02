@@ -13,7 +13,7 @@ The main progress this week is the data. Requesting real survey microdata would 
 
 Since the last update I have also frozen my requirements and drafted all the design diagrams and screen sketches from my proposal (section 5, Phase 2), so design is back on the September timeline of my Gantt chart, subject to your review.
 
-I have also built the first prototype ahead of plan: login with the three roles, the database loaded with the synthetic data, and first versions of the inventory, scheduling and child record screens, with 194 automated tests passing. I have also built the second prototype: the system now shows a 4-week vaccine demand forecast with stock-out alerts, plans outreach sessions from the prioritised defaulter list, records attendance, and exports a child's record in the FHIR standard. The screens were redesigned to work on phones first. For now the forecasts come from the two simple baseline methods; the SARIMA and GRU models will be trained on Google Colab and imported. The stock-out alerts caught 91.4% of true stock-out weeks, below my 95% target, and I report this as it is. The project is in my GitHub repository, which I have made public so that Colab can use it; it holds no real data, secrets or passwords.
+I have also built the first prototype ahead of plan: login with the three roles, the database loaded with the synthetic data, and first versions of the inventory, scheduling and child record screens, with 194 automated tests passing. I have also built the second prototype: the system now shows a 4-week vaccine demand forecast with stock-out alerts, plans outreach sessions from the prioritised defaulter list, records attendance, and exports a child's record in the FHIR standard. The screens were redesigned to work on phones first. I trained and compared the forecasting models on Google Colab with a GPU: the GRU neural network was the most accurate (MASE 0.677), just ahead of SARIMA (0.681), and both clearly beat the two simple baselines. The trained forecasts are now used in the system. The stock-out alerts caught 84.3% of true stock-out weeks with the trained models (91.4% with the baselines), below my 95% target; I report this as it is and explain the cause below. The project is in my GitHub repository, which I have made public so that Colab can use it; it holds no real data, secrets or passwords.
 
 # 2. Have I started cleaning the datasets?
 
@@ -134,7 +134,7 @@ Every check happens on the server before any data is read: a request without a v
 | 1 | Synthetic data and exploration | 28 Sep to 9 Oct | In progress (dataset regenerated after D-18 and D-19 and validated; figures done; supervisor sign-off pending) |
 | 2 | Requirements and design | 29 Sep to 9 Oct | In progress (requirements frozen, all diagrams and wireframes drafted; supervisor review pending) |
 | 3 | Prototype 1: data layer and the three module screens | 5 to 18 Oct | Built and tested ahead of plan (screenshots, gate review and `p1` tag pending) |
-| 4 | Model training and Prototype 2 | 12 to 25 Oct | In progress (Prototype 2 built and tested; SARIMA and GRU not yet trained on Colab) |
+| 4 | Model training and Prototype 2 | 12 to 25 Oct | In progress (models trained and compared, Prototype 2 built and tested; alert decision D-41 and `p2` tag pending) |
 | 5 | Refinement cycles and testing | 26 Oct to 6 Nov | Not started |
 | 6 | User acceptance testing and final system | 2 to 12 Nov | Not started |
 | 7 | Documentation (Chapters 4 to 6) | 5 Oct to 15 Nov | Not started |
@@ -215,12 +215,13 @@ Every check happens on the server before any data is read: a request without a v
 - Wrote one Colab notebook that runs everything in order: data generation and a check that it is identical to my evidence dataset, validation, data exploration, training series, the model comparison, selection and the final models.
 
 - Built the stock-out alerts and measured them against the true stock-outs in the synthetic data: with the baseline forecasts they caught 181 of 198 true stock-out weeks (recall 0.914), on average 2.15 weeks ahead, and 58.6% of alerts were followed by a stock-out or a week below the safety minimum. My target is a recall of at least 0.95, so it is **not met yet**. A first version of the rule caught only 66%, because it ignored the doses lost when opened vials are discarded; I corrected the rule before reporting (D-38).
-- Measured the two baselines: the 4-week moving average beat the seasonal naive method (average MASE 0.766 against 0.950) and was better than seasonal naive on 90.5% of series.
+- Trained and compared all four models on Google Colab (Tesla T4 GPU), after checking that Colab rebuilt exactly the same dataset (14 of 14 files identical). Average MASE (below 1 beats the seasonal naive method): GRU 0.677, SARIMA 0.681, moving average 0.766, seasonal naive 0.950. The GRU and SARIMA are close: each is better on about half of the series. Following my selection rule (D-21), the GRU is used for 80 series and SARIMA for 4, and these forecasts are now in the system.
+- With the trained forecasts the alerts caught 167 of 198 true stock-out weeks (recall 0.843) and 64.0% of alerts were useful; with the baselines recall was 0.914. The cause: the GRU's uncertainty range is too narrow (it contained the true value 78.6% of the time instead of 80%), so the alert rule sees less risk. I have listed options to fix this (D-41).
 - Checked my defaulter list against an independently written checking script for all 10,390 children under 2: status and missed doses matched for every child (100%), and the order matched at all 12 facilities.
 - Added to the system: the forecast job, forecasts with their accuracy on the Stock screen, alerts the facility manager can acknowledge, the delivery cycle and safety buffer settings, outreach session plans with the vaccines needed against stock, attendance recording, FHIR export of a child's record, and administrator screens for accounts, facilities and the schedule.
 - Redesigned the screens for phones first, with light and dark themes and an offline notice. 333 automated tests and 14 browser tests (desktop and phone) pass; the slowest page took 373 ms (95th percentile, without network time).
 
-**Pending:** running the Colab notebook for SARIMA and the GRU, importing the trained models and re-measuring the alerts; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
+**Pending:** a decision on which forecasts the alert rule uses (D-41) and, if chosen, one more Colab run; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
 
 ## Phase 5: Refinement cycles and testing
 
@@ -265,7 +266,6 @@ While planning, I re-read my proposal and listed items to correct, including fou
 
 | Task | Output I will show you |
 |---|---|
-| Run the Colab notebook: SARIMA and GRU backtests, comparison, selection, alert accuracy | Comparison tables per vaccine and the training log entry |
-| Import the trained models into the system and re-measure the alerts | Updated alert recall and precision |
+| Decide D-41 and, if needed, rerun Colab with calibrated GRU intervals | Updated alert recall and precision |
 | Gate reviews of Prototypes 1 and 2; tag `p1` and `p2` | Review notes and the tagged versions |
 | Prepare the user acceptance test task sheet and SUS questionnaire | Draft for your approval (needs your answer on ethics, question 3) |
