@@ -50,5 +50,7 @@ React.js, Django REST Framework, PostgreSQL, Python (pandas, scikit-learn, stats
 | `08_SETUP_AND_GIT.md` | Machine setup, SSH key, GitHub, hooks |
 | `09_PROPOSAL_ISSUES.md` | Defects found in draft 4 for the author to fix |
 | `10_ENGINEERING_RULES.md` | Scope, data, security, conventions, model and testing rules |
+| `11_PROJECT_HANDBOOK.md` | Single reference: status, roles and access, setup, Docker, every command and script, data storage, checks, tracking checklist |
+| `12_DATA_TO_TRAINING_PIPELINE.md` | Ordered stages from generation to trained models: commands, storage, cleaning, EDA, training location (local or Colab) |
 | `progress/PROGRESS_TRACKER.md` | Living status by phase, first person, for the supervisor |
 | `logs/` | As-executed logs |

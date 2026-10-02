@@ -74,6 +74,7 @@ Method (proposal 3.3, as updated by D-02): profiling of the synthetic, KDHS-cali
 | BR-06 | A child can receive each scheduled dose at most once; stock can never go negative (issues beyond stock are rejected) | Validation checks V-03, V-07 | Frozen |
 | BR-07 | Opened vials of vaccines without an open-vial policy are wasted at the end of the session; policy vaccines may be reused for up to 4 weeks | KE-MOH-2013 p28; PCV open question D-25 | Frozen (PCV PROVISIONAL) |
 | BR-08 | A child record from another facility is readable only through FR-32 (exact system ID, or name plus date of birth), read-only, and audited; writes stay limited to the user's own facility | Proposal 3.8.3; doc 10 section 3 | Frozen |
+| BR-09 | The defaulter list covers children under 24 months on the clinical date (scope D-01); older children keep their history but are not listed | D-01 | Frozen |
 
 ## 5. KEPI schedule used by the system
 

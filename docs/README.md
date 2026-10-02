@@ -18,11 +18,11 @@ python3 scripts/dev.py diagrams
 
 Then restore the local-only files from your personal backup (reference PDFs, assistant guide) and repeat the repository-local git settings in `08_SETUP_AND_GIT.md` (SSH key, identity, owner guard).
 
-| Folder | Contents |
-|---|---|
+| Folder           | Contents                                                                                                               |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `00` to `09` | Project context, plan, requirements, architecture, data, models, documentation plan, decisions, setup, proposal issues |
-| `logs/` | Implementation, data, test, training and source-check logs, defence notes, results ledger and history |
-| `evidence/` | Figures and tables cited in the report (EDA, diagrams, before and after tables) |
-| `diagrams/` | PlantUML sources, `schema.yaml`, generated data dictionary, traceability matrix |
-| `wireframes/` | Low-fidelity screen sketches |
-| `progress/` | Progress tracker and the Word report builder |
+| `logs/`        | Implementation, data, test, training and source-check logs, defence notes, results ledger and history                  |
+| `evidence/`    | Figures and tables cited in the report (EDA, diagrams, before and after tables)                                        |
+| `diagrams/`    | PlantUML sources,`schema.yaml`, generated data dictionary, traceability matrix                                       |
+| `wireframes/`  | Low-fidelity screen sketches                                                                                           |
+| `progress/`    | Progress tracker and the Word report builder                                                                           |

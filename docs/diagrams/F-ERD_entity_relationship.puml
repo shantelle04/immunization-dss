@@ -23,7 +23,7 @@ package "accounts" {
   entity "accounts_auditlog" as auditlog {
     * id <<PK>>
     --
-    * user_id <<FK>>
+    user_id <<FK>>
     facility_id <<FK>>
   }
 }
@@ -141,7 +141,7 @@ package "analytics_api" {
   }
 }
 facility |o--o{ user
-user ||--o{ auditlog
+user |o--o{ auditlog
 facility |o--o{ auditlog
 antigen ||--o{ scheduledose
 facility ||--o{ child

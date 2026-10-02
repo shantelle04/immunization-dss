@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 
 from .eda import run_eda
+from .forecast.commands import build_series, evaluate_alerts, run_backtests, train_final
+from .forecast.guard import TrainingRefused
 from .sim.calibrate import calibrate, refine
 from .sim.config import ConfigError, load_config, parse_config
 from .sim.dirty import build_dirty_imports
@@ -92,6 +94,28 @@ def main(argv: list[str] | None = None) -> int:
     p_eda = sub.add_parser("eda", help="EDA figures and dataset description for a validated run")
     p_eda.add_argument("run_dir", type=Path)
     p_eda.add_argument("--out", type=Path, default=Path("docs/evidence"))
+    p_series = sub.add_parser(
+        "build-series", help="weekly training series from a validated run's stock ledger"
+    )
+    p_series.add_argument("run_dir", type=Path)
+    p_series.add_argument("--out", type=Path, default=Path("data/processed"))
+    p_back = sub.add_parser("backtest", help="rolling-origin backtest, comparison and selection (Colab only)")
+    p_back.add_argument("run_dir", type=Path)
+    p_back.add_argument("--series", type=Path, required=True)
+    p_back.add_argument("--models", default="b1,b2,sarima,gru")
+    p_back.add_argument("--seed", type=int, default=42)
+    p_back.add_argument("--out", type=Path, required=True)
+    p_final = sub.add_parser(
+        "train-final", help="fit the selected model per series on all weeks (Colab only)"
+    )
+    p_final.add_argument("--series", type=Path, required=True)
+    p_final.add_argument("--results", type=Path, required=True)
+    p_final.add_argument("--seed", type=int, default=42)
+    p_alerts = sub.add_parser(
+        "evaluate-alerts", help="stock-out alert precision and recall against ground truth for a backtest"
+    )
+    p_alerts.add_argument("run_dir", type=Path)
+    p_alerts.add_argument("--results", type=Path, required=True)
     args = parser.parse_args(argv)
 
     try:
@@ -100,6 +124,18 @@ def main(argv: list[str] | None = None) -> int:
             if generated and not args.no_validate:
                 return 0 if validate(args.config, run_dir) else 1
             return 0
+        if args.command == "build-series":
+            build_series(args.run_dir, args.out)
+            return 0
+        if args.command == "backtest":
+            run_backtests(args.run_dir, args.series, args.models.split(","), args.seed, args.out)
+            return 0
+        if args.command == "evaluate-alerts":
+            evaluate_alerts(args.run_dir, args.results)
+            return 0
+        if args.command == "train-final":
+            train_final(args.series, args.results, args.seed)
+            return 0
         if args.command == "eda":
             print(f"report: {run_eda(args.run_dir, args.out)}")
             return 0
@@ -107,6 +143,9 @@ def main(argv: list[str] | None = None) -> int:
     except ConfigError as exc:
         print(exc, file=sys.stderr)
         return 2
+    except TrainingRefused as exc:
+        print(exc, file=sys.stderr)
+        return 3
 
 
 if __name__ == "__main__":

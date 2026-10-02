@@ -14,3 +14,6 @@ if _problems:
 
 DATABASES["default"]["USER"] = os.environ["DB_TEST_USER"]
 DATABASES["default"]["PASSWORD"] = os.environ["DB_TEST_PASSWORD"]
+
+# Speed only: tests hash many throwaway passwords. test_security asserts production uses Argon2 first.
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]

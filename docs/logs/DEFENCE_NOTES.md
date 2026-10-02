@@ -2,6 +2,43 @@
 
 Per phase: what was built, why, alternatives considered, weaknesses, and likely panel questions with answers.
 
+## Phase 4b: Prototype 2 (2026-10-02)
+
+**What was built.** Forecasts and stock-out alerts inside the system, outreach session plans and attendance, FHIR R4 export, administrator screens, and a mobile-first interface. Until the Colab models are imported, the app forecasts with the better of the two baselines per series (D-39).
+
+**The alert rule (D-38).** Stock minus the forecast's upper bound, week by week until the expected delivery, compared with a safety minimum that shrinks as the delivery approaches. The forecast predicts doses given, but stock also falls by discarded vial remainders (a 20-dose BCG vial opened for three children), so the forecast is scaled by the ledger's own ratio of doses leaving stock to doses given. Without that factor recall was 0.66; with it 0.914.
+
+**Results, stated as they are.** Alert recall 0.914 against a 0.95 target, precision 0.586. The defaulter list matched an independent oracle for all 10,390 children under 2.
+
+**Alternatives.** Alerting on weeks of stock left only (no forecast; cannot see seasonal peaks); a lower buffer for fewer alerts (recall barely changes, precision falls: sensitivity table, doc 05 section 6); storing data on the device for offline use (rejected for privacy, D-37).
+
+**Weaknesses.** Recall below target; a late delivery is treated as "nothing arrives in the next 4 weeks", which over-alerts when the delivery comes the next day. Baselines only until Colab runs.
+
+**Likely questions**
+1. Why is your alert accuracy below 95%? (It is measured against simulator truth with the baseline forecasts. Recall is lowest for OPV (0.818) and PCV (0.864) and highest for MR (0.978); why those series are missed is VERIFY (inspect `alert_decisions.csv`). The trained models may change it; both results will be reported.)
+2. How do you know the defaulter list is right? (An independent script re-implements the rule with whole-column operations from the raw files and agrees on every child.)
+3. Can a facility manager see another facility's alerts or sessions? (No: every query is filtered by the user's facility; tests show a 404 for another facility's alert and session.)
+4. Does the app store patient data on the phone? (No: only the app's code is cached; data on screen is kept in memory and cleared when the tab closes.)
+
+## Phase 4a: forecasting pipeline, built but not yet trained (2026-09-29)
+
+**What was built.** The code that turns the stock ledger into weekly series and compares four ways of forecasting them, plus one Colab notebook that runs every stage from data generation to the final models. Nothing has been trained: training runs only on Colab (D-14) and the commands refuse to fit a model anywhere else.
+
+**The series.** One per facility and vaccine (84), weekly doses issued from 4 January 2021 (260 weeks). Only the issues a clinic records are used; `truth/` is never read to build them. A week without issues is 0, and a week in which the ledger balance hit zero is flagged, because issues in that week understate demand (a child turned away is not an issue).
+
+**The comparison.** Seasonal naive (same week last year) and a 4-week moving average are the baselines any model must beat; SARIMA and a GRU are the candidates. Each is refitted at 6 cut-offs and forecasts the 4 weeks after each, so 24 weeks are scored and no test week is ever seen in training. MASE compares a model's error with the seasonal naive error on the training weeks: below 1 means the model is better than the simple rule.
+
+**Selection (D-21).** Per series: the GRU if it has at least 104 training weeks and beats seasonal naive; otherwise SARIMA; otherwise the better baseline.
+
+**Alternatives.** A single train and test split (one lucky or unlucky test period decides everything); training on the laptop (too little memory for TensorFlow, and the author ruled it out); SARIMA with a seasonal term at lag 52 (correct but slow for 84 series at 6 cut-offs, so seasonality is modelled with Fourier terms, D-36).
+
+**Weaknesses.** The data is simulated, so a model can learn the simulator's rules (R-02). Stock-out weeks censor demand; the bias against true demand is reported separately rather than hidden.
+
+**Likely questions**
+1. How do you know there is no leakage? (Every cut-off asserts that the last training week is before the first test week; scaling uses training weeks only; a test checks the cut-offs.)
+2. Why a global GRU instead of 84 small ones? (84 series of 260 weeks are short; one model shared across facilities and vaccines sees about 19,000 training windows instead of about 230.)
+3. Can someone reproduce your result? (Open the notebook in Colab at the tagged commit; it regenerates the identical data, checks every hash against `analytics/configs/evidence_hashes.json`, and records the git commit, seed, library versions and GPU in the manifest.)
+
 ## Phase 0: project skeleton and safe setup (2026-09-28)
 
 **What was built.** Three empty but working parts, each with a test: the analytics package (already had the data generator; now also the `immdss eda` command), a Django backend, and a React app. The database runs in Docker so the same setup works on Linux and Windows. One helper, `scripts/dev.py`, runs every common task with the same command on any operating system.

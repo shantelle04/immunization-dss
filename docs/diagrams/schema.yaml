@@ -3,7 +3,7 @@
 # Column: [name, PostgreSQL type, flags, source]. Flags: PK, UK, FK:<table>, NULL, and CHECK/DEFAULT notes.
 # Source: the column in a run's app/*.csv that the loader maps here ("-" = created by the system).
 # Nothing from truth/ or imports/ answer keys has a table (doc 10 section 2).
-# Every table also has created_at and updated_at (timestamptz, NOT NULL, DEFAULT now()).
+# Every table also has created_at and updated_at (timestamptz, NOT NULL, set by the application).
 
 apps:
   facilities:
@@ -32,17 +32,17 @@ apps:
         - [facility_id, bigint, "FK:facility NULL; CHECK NULL only for system_admin", "-"]
         - [is_active, boolean, "DEFAULT true", "-"]
         - [failed_logins, smallint, "DEFAULT 0 (lockout, NFR-03)", "-"]
-        - [locked_until, timestamptz, NULL, "-"]
-        - [last_login, timestamptz, NULL, "-"]
+        - [locked_until, timestamptz, "NULL", "-"]
+        - [last_login, timestamptz, "NULL", "-"]
     auditlog:
       csv: null
       purpose: Who created, changed or read (cross-facility) clinical and stock records (FR-41); no field contents
       columns:
         - [id, bigint, PK, "-"]
         - [at, timestamptz, "DEFAULT now(); INDEX (facility_id, at)", "-"]
-        - [user_id, bigint, "FK:user", "-"]
+        - [user_id, bigint, "FK:user NULL (NULL for a failed login with an unknown username)", "-"]
         - [facility_id, bigint, "FK:facility NULL", "-"]
-        - [action, varchar(32), "create | update | read | export | login | lockout", "-"]
+        - [action, varchar(32), "create | update | read | export | login | login_failed | lockout | logout", "-"]
         - [entity, varchar(48), "", "-"]
         - [entity_id, varchar(64), "", "-"]
         - [cross_facility, boolean, "DEFAULT false (BR-08)", "-"]
@@ -79,7 +79,7 @@ apps:
         - [source_ref, varchar(16), "UK NULL (loader key)", child_id]
         - [given_name, varchar(80), "", given_name]
         - [family_name, varchar(80), "INDEX (family_name, date_of_birth) for FR-32", family_name]
-        - [sex, char(1), "CHECK F | M", sex]
+        - [sex, varchar(1), "CHECK F | M", sex]
         - [date_of_birth, date, "", date_of_birth]
         - [caregiver_name, varchar(120), "", caregiver_name]
         - [registration_facility_id, bigint, "FK:facility", registration_facility_code]
@@ -143,9 +143,9 @@ apps:
         - [id, bigint, PK, "-"]
         - [run_at, timestamptz, "", "-"]
         - [git_sha, varchar(40), "", "-"]
-        - [data_sha256, char(64), "", "-"]
+        - [data_sha256, varchar(64), "", "-"]
         - [params, jsonb, "", "-"]
-        - [metrics, jsonb, NULL, "-"]
+        - [metrics, jsonb, "NULL", "-"]
     forecast:
       csv: null
       purpose: Weekly demand forecast per facility and antigen (FR-12)
@@ -175,7 +175,7 @@ apps:
         - [safety_minimum, "numeric(10,2)", "", "-"]
         - [status, varchar(16), "CHECK open | acknowledged | resolved", "-"]
         - [acknowledged_by_id, bigint, "FK:user NULL", "-"]
-        - [acknowledged_at, timestamptz, NULL, "-"]
+        - [acknowledged_at, timestamptz, "NULL", "-"]
 
   scheduling:
     outreachsession:
@@ -188,7 +188,7 @@ apps:
         - [date, date, "", date]
         - [kind, varchar(8), "CHECK fixed | outreach", kind]
         - [location_name, varchar(120), "", location_name]
-        - [capacity, integer, NULL, "-"]
+        - [capacity, integer, "NULL", "-"]
         - [status, varchar(8), "CHECK planned | held; loaded history = held", "-"]
     sessionplanitem:
       csv: null
@@ -234,4 +234,4 @@ apps:
         - [message, varchar(200), "", "-"]
 
 views:
-  stock_balance: "SELECT facility_id, antigen_id, SUM(quantity_doses) AS balance FROM inventory_stocktransaction GROUP BY 1, 2 (FR-11; never a writable table)"
+  inventory_stock_balance: "SELECT facility_id, antigen_id, SUM(quantity_doses) AS balance FROM inventory_stocktransaction GROUP BY 1, 2 (FR-11; never a writable table)"

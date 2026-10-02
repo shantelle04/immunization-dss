@@ -1,0 +1,22 @@
+{
+  "run_id": "sim-seed42-368707d3",
+  "code_sha256": "34f49b826ae3cc4b5a201980055c815846981757d112b3ab5c5852203465ae9a",
+  "config_sha256": "368707d39daca04065241fbcb20efdf80837cb661098443d904c61f744273aca",
+  "files": {
+    "app/antigens.csv": "948dc5abf5141f720dfd3f5442102f96cab4381f27f69f13f6bd6f7ecc7da9b6",
+    "app/children.csv": "4845f0894f122b0344efa5c7d3e518adf44b64f55682955f250c8dee48167b06",
+    "app/facilities.csv": "bd886dbbdaf3ceda8014cadb8853af07ff4cdc3097b45bf8d67a3c142476d507",
+    "app/immunization_events.csv": "0bde7ba0ab7ad94b7c6421d756bc9b50bf5e2c491a5e22c1746e5c5877eb711e",
+    "app/schedule.csv": "88e05660b17355a9599db09ebec5e4718e1a61174134862560068a9e40395350",
+    "app/sessions.csv": "46e1a3127aeb45dc812f2fe514eddc8312d13fda2c4e3556ffe3c9b96d5c55eb",
+    "app/stock_transactions.csv": "6337dd1e2fcb5897cee61c0007883d5ad89b181bd37f92b2ae39f40d2efa322c",
+    "app/vaccine_lots.csv": "caf46bf0566041b8e714d6e9cea74b3045c08a2416317d89889e0525d67455e6",
+    "imports/import_dirty_truth.csv": "5d34c35b50d83c353280cea6e6f6a1383600000809d880571788f1913c56d5c4",
+    "imports/import_immunizations_dirty.csv": "052f73cc397bf99646a491aa2b99642c552fffbacf65acb4c0f2baca1412ed67",
+    "imports/import_stock_dirty.csv": "ce428860818f66f34ccca3a36e0836674a97490b6ad8e1097366f82b5f5a79ed",
+    "truth/children_truth.csv": "519fe6b912d4336383dad0d87dbda46152331e0c9bfa0e4c4dff2414b6f7436f",
+    "truth/stockout_turned_away.csv": "1f39c84bc834f1b02e8419099ad3013f7436b8758cd34f7b924aa123eeaf2e74",
+    "truth/weekly_stock.csv": "f82628e2f081bbe20ea47b7d3a14bebb5d875bb3dfba3e444d5a3357dd4da80c"
+  },
+  "weekly_issues_sha256": "279617cf49eefa40473a8cb2873f4357238fd44848f791babf1459887bd9dc2b"
+}

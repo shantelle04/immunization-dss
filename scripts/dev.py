@@ -15,6 +15,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 import time
@@ -50,10 +51,16 @@ def _low_priority() -> dict:
     return {"preexec_fn": lambda: os.nice(10)}
 
 
-def run(*cmd: str | Path, cwd: Path = ROOT, heavy: bool = False, exit_on_error: bool = True) -> Result:
+def run(
+    *cmd: str | Path,
+    cwd: Path = ROOT,
+    heavy: bool = False,
+    exit_on_error: bool = True,
+    extra_env: dict | None = None,
+) -> Result:
     """Run a command, echo its output live, and keep a copy for the ledger."""
     print("$", " ".join(str(c) for c in cmd), flush=True)
-    env = {**os.environ, **ONE_THREAD} if heavy else None
+    env = {**os.environ, **(ONE_THREAD if heavy else {}), **(extra_env or {})} if heavy or extra_env else None
     start = time.perf_counter()
     proc = subprocess.Popen(
         [str(c) for c in cmd],
@@ -301,6 +308,239 @@ def diagrams(_: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _clinical_env() -> dict:
+    """IMMDSS_TODAY from the environment, else the evidence run's as-of date (D-32)."""
+    if os.environ.get("IMMDSS_TODAY"):
+        return {}
+    manifest = ROOT / DEFAULT_RUN / "manifest.json"
+    if not manifest.exists():
+        return {}
+    return {"IMMDSS_TODAY": json.loads(manifest.read_text())["window"]["as_of"]}
+
+
+def load(args: argparse.Namespace) -> None:
+    cmd = [PY, "manage.py", "load_synthetic", ROOT / args.run] + (["--replace"] if args.replace else [])
+    result = run(*cmd, cwd=ROOT / "backend", heavy=True, exit_on_error=False)
+    counts = dict(line.split(": ", 1) for line in result.output.splitlines() if ": " in line)
+    record("load", [result], counts)
+    if result.code:
+        sys.exit(result.code)
+
+
+def demo_users(args: argparse.Namespace) -> None:
+    cmd = [PY, "manage.py", "seed_demo_users"] + (["--reset"] if args.reset else [])
+    result = run(*cmd, cwd=ROOT / "backend", exit_on_error=False)
+    record("demo-users", [result], {"summary": result.output.strip().splitlines()[-1:]})
+    if result.code:
+        sys.exit(result.code)
+
+
+def walkthrough(args: argparse.Namespace) -> None:
+    out = ROOT / "docs" / "evidence" / f"P{args.prototype}_walkthrough_{Path(args.run).name}.md"
+    result = run(
+        PY,
+        "-m",
+        "evaluation.walkthrough",
+        ROOT / args.run,
+        "--out",
+        out,
+        cwd=ROOT / "backend",
+        heavy=True,
+        exit_on_error=False,
+        extra_env=_clinical_env(),
+    )
+    details: dict = {"report": out.name}
+    if result.code == 0:
+        data = json.loads(result.output[result.output.index("{") :])
+        details["max_p95_ms"] = max(r["p95_ms"] for r in data["latency"])
+        details["accuracy_pct"] = {r["query"]: r["accuracy_pct"] for r in data["accuracy"]}
+        planted = [r for r in data["ingestion"] if not r["defect"].startswith("(")]
+        clean = [r for r in data["ingestion"] if r["defect"].startswith("(")]
+        for label, rows in (("defects_caught", planted), ("clean_rows_rejected", clean)):
+            details[label] = f"{sum(r['caught_any'] for r in rows)}/{sum(r['planted'] for r in rows)}"
+    record("walkthrough", [result], details)
+    if result.code:
+        sys.exit(result.code)
+
+
+def forecasts(args: argparse.Namespace) -> None:
+    """Store 4-week forecasts and refresh alerts: baselines, or the results folder of a Colab run."""
+    cmd = [PY, "manage.py", "run_forecasts"] + (["--results", ROOT / args.results] if args.results else [])
+    result = run(*cmd, cwd=ROOT / "backend", heavy=True, exit_on_error=False, extra_env=_clinical_env())
+    details: dict = {"seconds": round(result.seconds, 1)}
+    if result.code == 0:
+        data = json.loads(result.output[result.output.index("{") :])
+        keys = ("source", "series", "weeks", "models", "forecasts", "alerts_active", "data_sha256")
+        details.update({k: data.get(k) for k in keys})
+    record("forecasts", [result], details)
+    if result.code:
+        sys.exit(result.code)
+
+
+def evaluate_models(args: argparse.Namespace) -> None:
+    """Baseline backtest and stock-out alert evaluation against ground truth (no model is fitted)."""
+    run_dir = ROOT / args.run
+    out = ROOT / "data" / "results" / f"{run_dir.name}-baselines"
+    steps = [
+        run(
+            tool("immdss"), "build-series", run_dir, "--out", ROOT / "data" / "processed", exit_on_error=False
+        ),
+        run(
+            tool("immdss"),
+            "backtest",
+            run_dir,
+            "--series",
+            ROOT / "data" / "processed" / run_dir.name / "weekly_issues.csv",
+            "--models",
+            "b1,b2",
+            "--out",
+            out,
+            heavy=True,
+            exit_on_error=False,
+        ),
+        run(tool("immdss"), "evaluate-alerts", run_dir, "--results", out, exit_on_error=False),
+    ]
+    details: dict = {"results": str(out.relative_to(ROOT))}
+    if all(r.code == 0 for r in steps):
+        manifest = json.loads((out / "manifest.json").read_text())
+        alerts = json.loads((out / "alert_metrics.json").read_text())
+        details["series_sha256"] = manifest["series_sha256"]
+        details["backtest"] = {
+            r["model"]: {k: r[k] for k in ("mean_mase", "mean_mae", "mean_smape", "coverage80")}
+            for r in manifest["overall"]
+        }
+        details["alerts"] = {
+            k: alerts[k] for k in ("alerts", "true_stockout_weeks", "recall", "precision", "f1", "buffer")
+        }
+        details["alert_sensitivity"] = alerts["sensitivity"]
+    record("evaluate", steps, details)
+    if any(r.code for r in steps):
+        sys.exit(1)
+
+
+def _wait_for(url: str, seconds: int = 60) -> bool:
+    import urllib.error
+    import urllib.request
+
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=2)
+            return True
+        except urllib.error.HTTPError:
+            return True
+        except OSError:
+            time.sleep(0.5)
+    return False
+
+
+def e2e(args: argparse.Namespace) -> None:
+    """Browser tests (Playwright, installed Chrome) against a separate database with its own accounts."""
+    password = secrets.token_urlsafe(24)
+    shots = ROOT / "docs" / "evidence"
+    backend_env = {
+        **os.environ,
+        **_clinical_env(),
+        "DJANGO_SETTINGS_MODULE": "config.settings_e2e",
+        "IMMDSS_E2E_PASSWORD": password,
+        "DJANGO_CORS_ORIGINS": "http://localhost:5174,http://127.0.0.1:5174",
+    }
+    prepare = run(
+        PY,
+        "-m",
+        "evaluation.e2e_prepare",
+        ROOT / args.run,
+        cwd=ROOT / "backend",
+        heavy=True,
+        exit_on_error=False,
+        extra_env=backend_env,
+    )
+    if prepare.code:
+        record("e2e", [prepare], {"stage": "prepare"})
+        sys.exit(prepare.code)
+    group = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if os.name == "nt"
+        else {"start_new_session": True}
+    )
+    quiet = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    servers = [
+        subprocess.Popen(
+            [str(PY), "manage.py", "runserver", "127.0.0.1:8001", "--noreload"],
+            cwd=ROOT / "backend",
+            env=backend_env,
+            **group,
+            **quiet,
+        ),
+        subprocess.Popen(
+            [npm(), "run", "dev"],
+            cwd=ROOT / "frontend",
+            env={**os.environ, "IMMDSS_API": "http://127.0.0.1:8001", "IMMDSS_WEB_PORT": "5174"},
+            **group,
+            **quiet,
+        ),
+    ]
+    try:
+        up = _wait_for("http://127.0.0.1:8001/api/v1/auth/me") and _wait_for("http://localhost:5174/")
+        if not up:
+            sys.exit("e2e: the test servers did not start (are ports 8001 and 5174 free?)")
+        result = run(
+            "npx",
+            "playwright",
+            "test",
+            cwd=ROOT / "frontend",
+            exit_on_error=False,
+            extra_env={
+                "E2E_PASSWORD": password,
+                "E2E_BASE_URL": "http://localhost:5174",
+                "E2E_SHOTS": str(shots) if args.screenshots else "",
+            },
+        )
+    finally:
+        for proc in servers:
+            _stop_tree(proc)
+    summary = [ln.strip() for ln in result.output.splitlines() if re.search(r"\d+ (passed|failed)", ln)]
+    record("e2e", [prepare, result], {"summary": summary, "screenshots": bool(args.screenshots)})
+    if result.code:
+        sys.exit(result.code)
+
+
+def run_app(_: argparse.Namespace) -> None:
+    """Backend on 127.0.0.1:8000 and the frontend on http://localhost:5173 (API proxied); Ctrl+C stops."""
+    env = {**os.environ, **_clinical_env()}
+    # Each server gets its own process group so stopping it also stops children (npm starts vite).
+    if os.name == "nt":
+        group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    else:
+        group = {"start_new_session": True}
+    server = [str(PY), "manage.py", "runserver", "127.0.0.1:8000"]
+    backend = subprocess.Popen(server, cwd=ROOT / "backend", env=env, **group)
+    frontend = subprocess.Popen([npm(), "run", "dev"], cwd=ROOT / "frontend", env=env, **group)
+    print("\nOpen http://localhost:5173  (Ctrl+C to stop)\n", flush=True)
+    signal.signal(signal.SIGTERM, _interrupt)  # a plain kill also stops both servers
+    try:
+        backend.wait()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for proc in (frontend, backend):
+            _stop_tree(proc)
+
+
+def _interrupt(*_: object) -> None:
+    raise KeyboardInterrupt
+
+
+def _stop_tree(proc: subprocess.Popen) -> None:
+    if proc.poll() is not None:
+        return
+    if os.name == "nt":
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True, check=False)
+    else:
+        os.killpg(proc.pid, signal.SIGTERM)
+    proc.wait()
+
+
 def bootstrap(args: argparse.Namespace) -> None:
     if not (ROOT / ".env").exists():
         env(args)
@@ -348,6 +588,7 @@ def main() -> None:
         ("lint", lint, "ruff check and format check"),
         ("history", history, "render docs/logs/results_ledger.jsonl as RESULTS_HISTORY.md"),
         ("diagrams", diagrams, "render docs/diagrams/*.puml to SVG and PNG (PlantUML in Docker)"),
+        ("run", run_app, "start backend and frontend: http://localhost:5173"),
     ]:
         sub.add_parser(name, help=doc).set_defaults(func=func)
     p_sim = sub.add_parser(
@@ -360,9 +601,30 @@ def main() -> None:
         "part", nargs="?", default="all", choices=["all", "analytics", "scripts", "backend", "frontend"]
     )
     p_test.set_defaults(func=test)
-    for name, func, doc in [("validate", validate, "validate a run"), ("eda", eda, "EDA figures for a run")]:
+    p_load = sub.add_parser("load", help="load the evidence run's app/ folder into the database")
+    p_load.add_argument("run", nargs="?", default=DEFAULT_RUN)
+    p_load.add_argument("--replace", action="store_true", help="replace previously loaded synthetic data")
+    p_load.set_defaults(func=load)
+    p_users = sub.add_parser("demo-users", help="create demo accounts; passwords go to .demo_credentials.txt")
+    p_users.add_argument("--reset", action="store_true", help="give existing demo users new passwords")
+    p_users.set_defaults(func=demo_users)
+    p_e2e = sub.add_parser("e2e", help="browser tests on a separate database (needs Chrome and the db)")
+    p_e2e.add_argument("run", nargs="?", default=DEFAULT_RUN)
+    p_e2e.add_argument("--screenshots", action="store_true", help="save F-UI-*.png to docs/evidence")
+    p_e2e.set_defaults(func=e2e)
+    p_fc = sub.add_parser("forecasts", help="store forecasts and refresh stock-out alerts in the database")
+    p_fc.add_argument("--results", help="results folder of a Colab training run; default: baselines only")
+    p_fc.set_defaults(func=forecasts)
+    for name, func, doc in [
+        ("validate", validate, "validate a run"),
+        ("eda", eda, "EDA figures for a run"),
+        ("walkthrough", walkthrough, "prototype walkthrough: latency, accuracy vs truth, import cleaning"),
+        ("evaluate", evaluate_models, "baseline backtest and alert precision/recall against ground truth"),
+    ]:
         p = sub.add_parser(name, help=doc)
         p.add_argument("run", nargs="?", default=DEFAULT_RUN)
+        if name == "walkthrough":
+            p.add_argument("--prototype", type=int, default=2, help="prototype number for the report name")
         p.set_defaults(func=func)
     args = parser.parse_args()
     args.func(args)

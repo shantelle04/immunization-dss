@@ -6,23 +6,23 @@
 |---|---|
 | Series | Weekly doses administered per facility x antigen, from the app's stock issues (what a real system would see). True demand (including children turned away) exists only in `truth/weekly_stock.csv` and is used to evaluate, never to train |
 | Horizon | 1 to 4 weeks ahead (rolling 4-week forecast, proposal 2.5.1) |
-| Candidates | B1 seasonal naive (same week last year, or last 4-week mean when history is short); B2 moving average (proposal's comparison point); ARIMA/SARIMA (statsmodels, order by AIC on training window); GRU (Keras, global model across series, lookback 12 to 26 weeks, calendar and facility-level features) |
+| Candidates | B1 seasonal naive (same week last year, or last 4-week mean when history is short); B2 moving average of the last 4 weeks (proposal's comparison point); SARIMA (statsmodels; ARIMA orders (1,0,0), (0,1,1), (1,1,1), (2,0,1), each with and without 2 Fourier harmonics of the 52.18-week year for seasonality (D-36), chosen by AIC on the training window); GRU (Keras, one global model across all 84 series, lookback 26 weeks, inputs: scaled series, ledger stock-out flag, week-of-year sine and cosine, one-hot facility and antigen) |
 | Selection per series | GRU when the series has at least 104 weeks and beats B1 on its backtest; else SARIMA; if history is under 26 weeks, a population-based estimate (catchment births x schedule x coverage). Proposal says "ARIMA fallback for facilities with no history"; ARIMA cannot fit without history, so this is logged as D-21 |
-| Validation | Rolling-origin backtest over the last 26 weeks, refit every 4 weeks; scalers fit on training windows only |
-| Intervals | SARIMA native intervals; GRU via quantile loss or residual bootstrap |
+| Validation | Rolling-origin backtest: 6 origins of 4 weeks covering the last 24 weeks (D-35), every model refit at each origin on the weeks before it only; scalers fit on training windows only; GRU early stopping uses the last 15% of the training weeks as a time-based hold-out |
+| Intervals | 80% intervals: SARIMA native intervals; GRU from the quantile (pinball) loss at 0.1, 0.5 and 0.9; baselines from the 10th and 90th percentiles of in-sample residuals |
 
 **Metrics**
 
 | Metric | Formula | Notes |
 |---|---|---|
 | MAE | mean abs(y - yhat) | In doses |
-| MASE | MAE / MAE of seasonal naive in-sample | Under 1 means better than naive |
+| MASE | MAE over the 4 test weeks / mean abs(y_t - y_(t-52)) over that origin's training weeks; averaged over the 6 origins | Under 1 means better than the in-sample seasonal naive; undefined (reported as missing) if the training weeks repeat exactly |
 | sMAPE | mean 2 abs(y - yhat) / (abs(y) + abs(yhat)) | Plain MAPE is undefined at zero weeks |
 | Interval coverage | share of actuals inside the 80% interval | Calibration |
 
 ## 2. Stock-out alerts (M1)
 
-Projected stock at week t+k = current stock + scheduled receipts up to t+k - cumulative upper-quantile demand to t+k. Alert when projected stock < safety minimum (BR-05) before the next replenishment.
+Projected stock at week t+k = current ledger balance - cumulative (80% upper bound of the forecast x usage factor) to t+k; no receipt is assumed before the expected delivery. Usage factor = (issues + wastage + losses) / issues over the last 12 weeks, because the forecast predicts doses given while stock also falls by discarded vial remainders. Safety minimum at t+k = average weekly use x weeks still to cover until the expected delivery x (1 + buffer) (BR-05; buffer 0.25, D-33). Expected delivery = last receipt + replenishment cycle; if that date has passed (late delivery), the full 4-week horizon is covered. Alert when projected stock < safety minimum in any week before the expected delivery (D-38). Code: `analytics/src/immdss_analytics/forecast/alerts.py`, shared by the evaluation and the application.
 
 | Metric | Definition (against simulator ground truth) |
 |---|---|
@@ -30,6 +30,7 @@ Projected stock at week t+k = current stock + scheduled receipts up to t+k - cum
 | Alert precision | Alerts followed by a true stock-out or true below-minimum week within 4 weeks / all alerts |
 | F1 | Harmonic mean |
 | Lead time | Weeks between alert and the event |
+| Evaluation design | One alert decision per series at each of the 6 backtest origins (504 decisions), from ledger data before the origin and that origin's forecast; scored against the 4 weeks after the origin. Precision counts a true stock-out or a true below-minimum week; strict precision counts stock-outs only |
 
 ## 3. Defaulter classification and priority (M2)
 
@@ -61,3 +62,30 @@ Data-cleaning metric: import validation scored against `imports/import_dirty_tru
 | Data pipeline | pytest | Every C-rule has a fixture test; KDHS reproduction check; simulator validation checks | TC-D-nn |
 | Model | backtest harness | Metrics above, logged per run | TC-M-nn |
 | UAT and usability | Task sheet, SUS (Brooke, 1996), observer notes | 5 to 8 participants (D-12) | TC-UAT-nn |
+
+## 6. Results so far (evidence run `sim-seed42-368707d3`)
+
+Every number below is from a logged run: results ledger entries `evaluate` and `walkthrough` at commit `855d49a`, files in `data/results/sim-seed42-368707d3-baselines/`, training series SHA-256 `279617cf49ee...`. SARIMA and the GRU have not been run yet (Colab, D-14).
+
+**Forecast backtest, baselines (84 series, 6 origins, last 24 weeks)**
+
+| Model | Mean MASE | Median MASE | Series beating seasonal naive | Mean MAE (doses/week) | Mean sMAPE | 80% interval coverage |
+|---|---|---|---|---|---|---|
+| B2 moving average (4 weeks) | 0.766 | 0.724 | 90.5% | 4.69 | 0.375 | 0.812 |
+| B1 seasonal naive | 0.950 | 0.934 | 64.3% | 5.86 | 0.493 | 0.842 |
+
+Bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/week in normal weeks and -0.39 in stock-out weeks; B1 -1.10 and -2.25. Selection (D-21 fallback, no SARIMA or GRU yet): B2 for 64 series, B1 for 20.
+
+**Stock-out alerts with the selected baseline (D-38, buffer 0.25)**
+
+| Measure | Value | D-07 target |
+|---|---|---|
+| Recall (true stock-out weeks alerted within 4 weeks) | 0.914 (181 of 198) | at least 0.95: **not met** |
+| Precision (stock-out or below minimum) | 0.586 | reported |
+| Strict precision (stock-out only) | 0.359 | reported |
+| F1 | 0.714 | reported |
+| Mean lead time | 2.15 weeks | reported |
+
+Sensitivity to the buffer (not a tuned result; the reported value uses D-33): 0.0 gives recall 0.914, precision 0.483; 0.5 gives recall 0.919, precision 0.729. Recall per vaccine ranges from 0.818 (OPV) to 0.978 (MR). The Colab models may change these figures; both will be reported.
+
+**Defaulter categorisation (oracle, doc 05 section 3)**: 10,390 children under 2 across 12 facilities; defaulter status and overdue dose list match the independent oracle for 10,390 of 10,390 (100%); rank order matches for 12 of 12 facilities.
