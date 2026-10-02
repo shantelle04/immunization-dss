@@ -223,7 +223,7 @@ Every check happens on the server before any data is read: a request without a v
 
 - I tried to fix the alert recall by calibrating the GRU's uncertainty range on its validation weeks (D-41). It made no difference (recall still 0.843): the range was already right on those weeks, but on the test weeks actual demand went above the GRU's upper bound 13.1% of the time instead of 10%. The GRU gave exactly the same forecasts in both Colab runs, which shows the training is repeatable.
 
-**Pending:** choosing the next step for the alerts (calibrate the upper end only, or use SARIMA's range for alerts; D-41); tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
+**Pending:** I have now built a calibration of only the upper end of the GRU's range, on weeks the model never sees during training (D-41, option D); one more Colab run will measure it; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
 
 ## Phase 5: Refinement cycles and testing
 
@@ -268,6 +268,6 @@ While planning, I re-read my proposal and listed items to correct, including fou
 
 | Task | Output I will show you |
 |---|---|
-| Next step for the alert recall (D-41 options) | Updated alert recall and precision |
+| Colab run with the upper-end calibration (D-41, option D) | Updated alert recall and precision |
 | Gate reviews of Prototypes 1 and 2; tag `p1` and `p2` | Review notes and the tagged versions |
 | Prepare the user acceptance test task sheet and SUS questionnaire | Draft for your approval (needs your answer on ethics, question 3) |

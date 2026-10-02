@@ -9,7 +9,7 @@ import pytest
 
 from immdss_analytics.forecast import alerts, guard
 from immdss_analytics.forecast import backtest as bt
-from immdss_analytics.forecast.gru import conformal_margin
+from immdss_analytics.forecast.gru import upper_margin
 from immdss_analytics.forecast.guard import TrainingRefused
 from immdss_analytics.forecast.metrics import coverage, mae, mase, naive_scale, smape
 from immdss_analytics.forecast.models import fourier_terms, moving_average, seasonal_naive
@@ -210,13 +210,12 @@ def test_alert_decisions_use_only_data_before_the_origin_and_are_scored_against_
     assert summary["mean_lead_time_weeks"] == 4.0
 
 
-def test_conformal_margin_reaches_the_target_coverage_and_can_narrow():
+def test_upper_margin_sets_the_exceedance_rate_and_can_lower_the_bound():
     rng = np.random.default_rng(3)
     actual = rng.normal(0, 1, 2000)
-    narrow_lo, narrow_hi = np.full(2000, -0.5), np.full(2000, 0.5)
-    margin = conformal_margin(narrow_lo, narrow_hi, actual, 0.8)
-    assert margin > 0
-    assert coverage(actual, narrow_lo - margin, narrow_hi + margin) >= 0.8
-    wide = conformal_margin(np.full(2000, -5.0), np.full(2000, 5.0), actual, 0.8)
-    assert wide < 0, "an interval that is too wide is narrowed"
-    assert coverage(actual, -5 - wide, 5 + wide) == pytest.approx(0.8, abs=0.01)
+    low = upper_margin(np.zeros(2000), actual, 0.9)
+    assert low > 0
+    assert (actual <= low).mean() >= 0.9
+    high = upper_margin(np.full(2000, 5.0), actual, 0.9)
+    assert high < 0, "an upper end that is too high is lowered"
+    assert (actual <= 5 + high).mean() == pytest.approx(0.9, abs=0.01)
