@@ -16,6 +16,7 @@ HORIZON = 4
 USE_WINDOW_WEEKS = 12
 DEFAULT_CYCLE_WEEKS = 4
 DEFAULT_BUFFER = 0.25  # D-33
+DEFAULT_GRACE_WEEKS = 1  # D-42: a delivery up to one week late (ASSUMPTION)
 KEY = ["facility_code", "antigen_code"]
 
 
@@ -81,6 +82,23 @@ def first_breach(
     return None
 
 
+def run_out_if_delivery_late(
+    stock: float, upper: list[float], cover_weeks: int, grace_weeks: int
+) -> Breach | None:
+    """Late-delivery check (D-42): would stock reach zero if the expected delivery came up to `grace_weeks`
+    late? Looks only at the weeks just after the expected delivery, which the main rule does not cover.
+
+    Kept for the evaluation: on the evidence run it flags about 96% of decisions even with a one-week grace,
+    so it does not separate risky series from safe ones and is not used as an alert.
+    """
+    used = 0.0
+    for k, use in enumerate(upper[: cover_weeks + grace_weeks], start=1):
+        used += float(use)
+        if k > cover_weeks and stock - used < 0:
+            return Breach(k, round(stock - used, 2), 0.0)
+    return None
+
+
 @dataclass(frozen=True)
 class SeriesState:
     stock_doses: int
@@ -119,6 +137,7 @@ def decide(
     selection: pd.DataFrame,
     cycle_weeks: int = DEFAULT_CYCLE_WEEKS,
     buffer: float = DEFAULT_BUFFER,
+    grace_weeks: int = DEFAULT_GRACE_WEEKS,
 ) -> pd.DataFrame:
     """One row per backtest origin and series: the alert decision from data before the origin only."""
     tx = ledger.assign(date=pd.to_datetime(ledger["date"]))
@@ -133,7 +152,11 @@ def decide(
     for (fac, ant, origin), g in fc.groupby([*KEY, "origin_week"], sort=True):
         g = g[g["model"] == chosen[(fac, ant)]].sort_values("h")
         state = series_state(tx_by_series[(fac, ant)], origin)
-        cover, breach = breach_for(state, list(g["hi80"]), origin.date(), cycle_weeks, buffer)
+        hi80 = list(g["hi80"])
+        cover, breach = breach_for(state, hi80, origin.date(), cycle_weeks, buffer)
+        # Evaluated only (D-42): the application does not raise this warning.
+        late = [u * state.usage_factor for u in hi80]
+        warning = None if breach else run_out_if_delivery_late(state.stock_doses, late, cover, grace_weeks)
         rows.append(
             {
                 "facility_code": fac,
@@ -146,6 +169,8 @@ def decide(
                 "cover_weeks": cover,
                 "alert": breach is not None,
                 "breach_week_ahead": breach.week_ahead if breach else np.nan,
+                "warning": warning is not None,
+                "warning_week_ahead": warning.week_ahead if warning else np.nan,
             }
         )
     return pd.DataFrame(rows)

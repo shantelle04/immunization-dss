@@ -175,6 +175,15 @@ def test_replenishment_cover_and_first_breach():
     assert alerts.usage_factor(10, 30) == 4.0 and alerts.usage_factor(0, 5) == 1.0
 
 
+def test_late_delivery_check_looks_only_just_after_the_expected_delivery():
+    upper = [10, 10, 10, 10]
+    late = alerts.run_out_if_delivery_late(15, upper, cover_weeks=1, grace_weeks=1)
+    assert (late.week_ahead, late.projected_doses) == (2, -5), "stock ends if the delivery is one week late"
+    assert alerts.run_out_if_delivery_late(25, upper, 1, 1) is None, "stock lasts one late week"
+    assert alerts.run_out_if_delivery_late(25, upper, 1, 2).week_ahead == 3
+    assert alerts.run_out_if_delivery_late(5, upper, 4, 1) is None, "nothing to check beyond the horizon"
+
+
 def test_alert_decisions_use_only_data_before_the_origin_and_are_scored_against_truth():
     weeks = pd.date_range("2025-01-06", periods=20, freq="W-MON")
     origin = weeks[16]

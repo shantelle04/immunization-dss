@@ -13,6 +13,16 @@ from .series import build_weekly_series, read_series, write_series
 
 SERIES_FILE = "weekly_issues.csv"
 SENSITIVITY_BUFFERS = (0.0, 0.1, 0.25, 0.5)
+GRACE_WEEKS = (1, 2, 3)
+WITH_WARNINGS_KEYS = (
+    "alerts",
+    "true_stockout_weeks_alerted",
+    "recall",
+    "precision",
+    "precision_stockout_only",
+    "f1",
+    "mean_lead_time_weeks",
+)
 
 
 def _run_manifest(run_dir: Path) -> dict:
@@ -104,6 +114,17 @@ def evaluate_alerts(run_dir: Path, results: Path) -> Path:
     for buffer in SENSITIVITY_BUFFERS:
         _, at = alerts.evaluate(alerts.decide(ledger, forecasts, selection, buffer=buffer), truth, buffer)
         summary["sensitivity"].append({k: at[k] for k in ("buffer", "alerts", "recall", "precision", "f1")})
+    # D-42: alerts plus late-delivery warnings, scored the same way; the reported value uses a 1-week grace.
+    summary["with_late_delivery_check"] = []
+    for grace in GRACE_WEEKS:
+        d = alerts.decide(ledger, forecasts, selection, grace_weeks=grace)
+        _, at = alerts.evaluate(d.assign(alert=d["alert"] | d["warning"]), truth)
+        row = {
+            "grace_weeks": grace,
+            "warnings": int(d["warning"].sum()),
+            "flagged_share": round(at["alerts"] / len(d), 3),
+        }
+        summary["with_late_delivery_check"].append(row | {k: at[k] for k in WITH_WARNINGS_KEYS})
     summary["models_used"] = selection["model"].value_counts().to_dict()
     summary["run_id"] = _run_manifest(run_dir)["run_id"]
     scored.to_csv(results / "alert_decisions.csv", index=False)

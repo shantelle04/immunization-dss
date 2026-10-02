@@ -225,7 +225,9 @@ Every check happens on the server before any data is read: a request without a v
 
 - I then calibrated only the upper end of the GRU's range on weeks the model never sees in training (D-41). The GRU improved again (MASE 0.671, its range now correct 80.6% of the time), but the alerts did not change (recall 0.843). When I examined the 28 missed stock-outs, 24 happened after a delivery that was expected within the 4 weeks but came late or short. My alert rule assumes deliveries arrive on time, so better forecasts cannot catch these. The next fix belongs in the alert rule, not the model (D-42).
 
-**Pending:** a decision on adding a no-delivery check to the alert rule (D-42); tagging the version as `p2`; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
+- I tested a late-delivery check for the alerts (D-42): warn when stock would run out if the expected delivery came one week late. It caught every stock-out, but only because it flagged 95.6% of all cases, which is no better than alerting everything, so I did not add it to the system. My reported result stays at recall 0.843 with precision 0.630. My conclusion is that with deliveries this unreliable, a 95% recall cannot be reached at a useful precision by forecasting demand alone; I would like to discuss the target with you (question 2).
+
+**Pending:** tagging the version as `p2`; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
 
 ## Phase 5: Refinement cycles and testing
 
@@ -270,6 +272,6 @@ While planning, I re-read my proposal and listed items to correct, including fou
 
 | Task | Output I will show you |
 |---|---|
-| Add the no-delivery check to the alert rule if approved (D-42); it runs locally, no training needed | Updated alert recall and precision |
+| Gate review of Prototype 2 and a load test of the dashboards | Review notes and response times under load |
 | Gate reviews of Prototypes 1 and 2; tag `p1` and `p2` | Review notes and the tagged versions |
 | Prepare the user acceptance test task sheet and SUS questionnaire | Draft for your approval (needs your answer on ethics, question 3) |
