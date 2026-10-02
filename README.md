@@ -64,6 +64,8 @@ Placeholders are rejected: Django refuses to start, and the database container r
 | `simulate [--force]` | Generate the seeded synthetic dataset into `data/synthetic/` (about 70 s, one CPU core, about 0.7 GB RAM, low priority). Skipped in about 1 s when a validated run with the same seed, config and generator code exists |
 | `validate [run_dir]` | Run the 11 validation checks on a generated run |
 | `eda [run_dir]` | Exploratory figures and the dataset description for a validated run |
+| `load`, `demo-users`, `forecasts`, `run` | Load the data, create demo accounts, store forecasts and alerts, start the app (doc 14) |
+| `walkthrough`, `evaluate`, `e2e` | Prototype evaluation, baseline and alert evaluation, browser tests |
 
 ## Model training (Google Colab only)
 

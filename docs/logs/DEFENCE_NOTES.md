@@ -2,6 +2,24 @@
 
 Per phase: what was built, why, alternatives considered, weaknesses, and likely panel questions with answers.
 
+## Phase 4b: Prototype 2 (2026-10-02)
+
+**What was built.** Forecasts and stock-out alerts inside the system, outreach session plans and attendance, FHIR R4 export, administrator screens, and a mobile-first interface. Until the Colab models are imported, the app forecasts with the better of the two baselines per series (D-39).
+
+**The alert rule (D-38).** Stock minus the forecast's upper bound, week by week until the expected delivery, compared with a safety minimum that shrinks as the delivery approaches. The forecast predicts doses given, but stock also falls by discarded vial remainders (a 20-dose BCG vial opened for three children), so the forecast is scaled by the ledger's own ratio of doses leaving stock to doses given. Without that factor recall was 0.66; with it 0.914.
+
+**Results, stated as they are.** Alert recall 0.914 against a 0.95 target, precision 0.586. The defaulter list matched an independent oracle for all 10,390 children under 2.
+
+**Alternatives.** Alerting on weeks of stock left only (no forecast; cannot see seasonal peaks); a lower buffer for fewer alerts (recall barely changes, precision falls: sensitivity table, doc 05 section 6); storing data on the device for offline use (rejected for privacy, D-37).
+
+**Weaknesses.** Recall below target; a late delivery is treated as "nothing arrives in the next 4 weeks", which over-alerts when the delivery comes the next day. Baselines only until Colab runs.
+
+**Likely questions**
+1. Why is your alert accuracy below 95%? (It is measured against simulator truth with the baseline forecasts. Recall is lowest for OPV (0.818) and PCV (0.864) and highest for MR (0.978); why those series are missed is VERIFY (inspect `alert_decisions.csv`). The trained models may change it; both results will be reported.)
+2. How do you know the defaulter list is right? (An independent script re-implements the rule with whole-column operations from the raw files and agrees on every child.)
+3. Can a facility manager see another facility's alerts or sessions? (No: every query is filtered by the user's facility; tests show a 404 for another facility's alert and session.)
+4. Does the app store patient data on the phone? (No: only the app's code is cached; data on screen is kept in memory and cleared when the tab closes.)
+
 ## Phase 4a: forecasting pipeline, built but not yet trained (2026-09-29)
 
 **What was built.** The code that turns the stock ledger into weekly series and compares four ways of forecasting them, plus one Colab notebook that runs every stage from data generation to the final models. Nothing has been trained: training runs only on Colab (D-14) and the commands refuse to fit a model anywhere else.

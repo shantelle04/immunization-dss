@@ -1,6 +1,6 @@
 # 11. Project handbook
 
-The single reference for how the Immunization Decision Support System works: status, setup, Docker, data generation, every script and command, roles and what each can access, and how everything is checked. Detailed stage-by-stage data and training plan: doc 12. Data generation, storage and role access in one place: doc 13. Decisions: doc 07. Rules: doc 10.
+The single reference for how the Immunization Decision Support System works: status, setup, Docker, data generation, every script and command, roles and what each can access, and how everything is checked. Detailed stage-by-stage data and training plan: doc 12. Data generation, storage and role access in one place: doc 13. Screens, demo script and running the system: doc 14. Decisions: doc 07. Rules: doc 10.
 
 Status as of 29 September 2026. Evidence run: `sim-seed42-368707d3`.
 
@@ -26,7 +26,7 @@ All data is synthetic (D-02): simulated data is used because no facility-level d
 | 1 | Synthetic data and EDA | Done | doc 04, `evidence/EDA_sim-seed42-368707d3.md`, `logs/DATA_CLEANING_LOG.md` |
 | 2 | Requirements and design | Drafted, supervisor review pending | doc 02, `diagrams/`, `wireframes/` |
 | 3 | Prototype 1 | Built and tested; gate review, screenshots, merge and `p1` tag pending | branch `phase/3-prototype-1`, `evidence/P1_walkthrough_*.md` |
-| 4 | Models and Prototype 2 | In progress: training series, backtest, comparison and the Colab notebook built and tested locally; **no model has been trained yet** (training runs on Colab only, D-14) | branch `phase/4-models`, doc 12 stages 7 to 11, `notebooks/immdss_colab_pipeline.ipynb` |
+| 4 | Models and Prototype 2 | Prototype 2 built and tested: forecasts and stock-out alerts in the app (baselines until the Colab models are imported), session plans and attendance, FHIR export, admin screens, mobile-first UI, browser tests. **SARIMA and GRU not yet trained** (Colab only, D-14); alert recall 0.914 against the 0.95 target | branch `phase/4-models`, doc 05 section 6, doc 14, `evidence/P2_walkthrough_*.md`, `evidence/F-UI-*.png` |
 | 5 to 8 | Refinement and testing, user acceptance testing, documentation, demonstration | Not started | doc 01 |
 
 "Calibration" in Phase 1 adjusted the data generator until it matched published coverage figures. It is not model training.
@@ -167,7 +167,10 @@ One command runner for Linux, macOS and Windows (standard library only). Result-
 | `eda [run]` | exploration figures and dataset table | yes |
 | `load [run] [--replace]` | load a validated run's `app/` folder into the database | yes |
 | `demo-users [--reset]` | create demo accounts, passwords to `.demo_credentials.txt` | yes |
-| `walkthrough [run]` | prototype evaluation: latency, accuracy against truth, import cleaning | yes |
+| `walkthrough [run] [--prototype N]` | prototype evaluation: latency, accuracy against truth and the defaulter oracle, import cleaning | yes |
+| `forecasts [--results DIR]` | store 4-week forecasts and refresh alerts: baselines, or import a Colab results folder | yes |
+| `evaluate [run]` | baseline backtest and alert precision and recall against truth (fits nothing) | yes |
+| `e2e [run] [--screenshots]` | Playwright browser tests (desktop and phone) on a separate database; screenshots to `docs/evidence/` | yes |
 | `run` | start the backend (127.0.0.1:8000) and frontend (http://localhost:5173); Ctrl+C stops both | |
 | `diagrams` | regenerate the schema diagrams and data dictionary, render all PlantUML to `docs/evidence/` | yes |
 | `history` | turn the ledger into `docs/logs/RESULTS_HISTORY.md` | |

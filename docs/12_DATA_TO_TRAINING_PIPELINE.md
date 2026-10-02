@@ -1,6 +1,6 @@
 # 12. Data pipeline: from generation to trained models, in order
 
-What each stage does, which script runs it, where its output is stored, and what is still planned. Stages 1 to 6 are done and evidenced. Stages 7 and 8 are built and tested; stages 9 to 11 are built and run only on Google Colab (D-14) through `notebooks/immdss_colab_pipeline.ipynb`; nothing has been trained yet. Stage 12 is planned. Evidence run: `sim-seed42-368707d3`.
+What each stage does, which script runs it, where its output is stored, and what is still planned. Stages 1 to 6 are done and evidenced. Stages 7 and 8 are built and tested; stages 9 to 11 are built and run only on Google Colab (D-14) through `notebooks/immdss_colab_pipeline.ipynb`; nothing has been trained yet. Stage 12 is built: the app runs the baselines until Colab results are imported (D-39). Evidence run: `sim-seed42-368707d3`.
 
 **Basis for synthetic data (D-02).** No facility-level dataset of weekly vaccine stock and child vaccination records is publicly available for Kenya (KHIS and the logistics system need official access), and real child records would need ethics approval. Using simulated data where no dataset exists is allowed (confirmed by the author, 29 September 2026) and matches proposal 1.7 ("only simulated patient data will be used for development and testing").
 
@@ -19,7 +19,7 @@ What each stage does, which script runs it, where its output is stored, and what
 | 9 | Split for evaluation | inside stage 10 | none (rules only) | Built, tested |
 | 10 | Train and backtest | `immdss backtest`, `immdss train-final` (Colab only) | `results/` on Colab, downloaded as a zip; the training log | Built; not yet run |
 | 11 | Compare, select, evaluate against truth | inside stage 10 | same | Built; not yet run |
-| 12 | Use in the system | `manage.py run_forecasts` (planned, nightly) | Forecast and StockAlert tables | Phase 4 |
+| 12 | Use in the system | `dev.py forecasts [--results DIR]` (`manage.py run_forecasts`, nightly by cron) | Forecast and StockAlert tables | Built, tested |
 
 ## Stage 1. Configure
 
@@ -125,9 +125,9 @@ No data or secret is uploaded: Colab regenerates the data from the seed. The zip
 
 `truth/` is read only here, for scoring; no model ever receives it as input.
 
-## Stage 12. Use in the system (planned)
+## Stage 12. Use in the system
 
-A nightly job (`manage.py run_forecasts`, cron, D-13) builds the latest series from the database, loads the selected model per series (D-21), writes the 4-week forecasts and any stock-out alerts, and the inventory dashboard shows them with the model name and its backtest accuracy.
+`manage.py run_forecasts` (cron, D-13; `dev.py forecasts`) rebuilds the series from the database with the same function as stage 7 (its SHA-256 equals the training series for the evidence run, checked by the walkthrough), takes forecasts from the baselines or from an imported Colab results folder (refused if the series hash differs, D-39), stores them, and raises, keeps or resolves stock-out alerts (D-38). The Stock screen shows the forecast, its interval, the model and its backtest accuracy (doc 14).
 
 ## Where training runs (D-14, decided)
 

@@ -2,7 +2,7 @@
 title: "Project Progress Report"
 subtitle: "A Web-Based Decision Support System for Healthcare Workers to Address Childhood Immunization Gaps through Predictive Analytics and Smart Scheduling"
 author: "Muthomi, Shantelle Nkatha (168873), BBIT 4D. Supervisor: Mr. Titus Tunduny"
-date: "Status as of 29 September 2026"
+date: "Status as of 2 October 2026"
 ---
 
 # 1. Summary
@@ -13,7 +13,7 @@ The main progress this week is the data. Requesting real survey microdata would 
 
 Since the last update I have also frozen my requirements and drafted all the design diagrams and screen sketches from my proposal (section 5, Phase 2), so design is back on the September timeline of my Gantt chart, subject to your review.
 
-I have also built the first prototype ahead of plan: login with the three roles, the database loaded with the synthetic data, and first versions of the inventory, scheduling and child record screens, with 194 automated tests passing. I have started Phase 4: the forecasting pipeline and a Google Colab notebook that runs every step from data generation to model comparison are built and tested, and I will train the models on Colab with a GPU. No model has been trained yet. The project is in my GitHub repository, which I have made public so that Colab can use it; it holds no real data, secrets or passwords.
+I have also built the first prototype ahead of plan: login with the three roles, the database loaded with the synthetic data, and first versions of the inventory, scheduling and child record screens, with 194 automated tests passing. I have also built the second prototype: the system now shows a 4-week vaccine demand forecast with stock-out alerts, plans outreach sessions from the prioritised defaulter list, records attendance, and exports a child's record in the FHIR standard. The screens were redesigned to work on phones first. For now the forecasts come from the two simple baseline methods; the SARIMA and GRU models will be trained on Google Colab and imported. The stock-out alerts caught 91.4% of true stock-out weeks, below my 95% target, and I report this as it is. The project is in my GitHub repository, which I have made public so that Colab can use it; it holds no real data, secrets or passwords.
 
 # 2. Have I started cleaning the datasets?
 
@@ -134,7 +134,7 @@ Every check happens on the server before any data is read: a request without a v
 | 1 | Synthetic data and exploration | 28 Sep to 9 Oct | In progress (dataset regenerated after D-18 and D-19 and validated; figures done; supervisor sign-off pending) |
 | 2 | Requirements and design | 29 Sep to 9 Oct | In progress (requirements frozen, all diagrams and wireframes drafted; supervisor review pending) |
 | 3 | Prototype 1: data layer and the three module screens | 5 to 18 Oct | Built and tested ahead of plan (screenshots, gate review and `p1` tag pending) |
-| 4 | Model training and Prototype 2 | 12 to 25 Oct | In progress (training pipeline and Colab notebook built; no model trained yet) |
+| 4 | Model training and Prototype 2 | 12 to 25 Oct | In progress (Prototype 2 built and tested; SARIMA and GRU not yet trained on Colab) |
 | 5 | Refinement cycles and testing | 26 Oct to 6 Nov | Not started |
 | 6 | User acceptance testing and final system | 2 to 12 Nov | Not started |
 | 7 | Documentation (Chapters 4 to 6) | 5 Oct to 15 Nov | Not started |
@@ -214,7 +214,13 @@ Every check happens on the server before any data is read: a request without a v
 - Wrote the backtest (6 rolling cut-offs over the last 24 weeks), the four models (seasonal naive, moving average, SARIMA and GRU), the accuracy measures and the rule that picks the best model per series. 11 new tests pass.
 - Wrote one Colab notebook that runs everything in order: data generation and a check that it is identical to my evidence dataset, validation, data exploration, training series, the model comparison, selection and the final models.
 
-**Pending:** running the notebook on Colab (no model has been trained yet), recording the results, the stock-out alerts and the Prototype 2 screens. Two choices for your review: a 24-week test period instead of 26 (D-35), and modelling yearly seasonality in SARIMA with Fourier terms (D-36).
+- Built the stock-out alerts and measured them against the true stock-outs in the synthetic data: with the baseline forecasts they caught 181 of 198 true stock-out weeks (recall 0.914), on average 2.15 weeks ahead, and 58.6% of alerts were followed by a stock-out or a week below the safety minimum. My target is a recall of at least 0.95, so it is **not met yet**. A first version of the rule caught only 66%, because it ignored the doses lost when opened vials are discarded; I corrected the rule before reporting (D-38).
+- Measured the two baselines: the 4-week moving average beat the seasonal naive method (average MASE 0.766 against 0.950) and was better than seasonal naive on 90.5% of series.
+- Checked my defaulter list against an independently written checking script for all 10,390 children under 2: status and missed doses matched for every child (100%), and the order matched at all 12 facilities.
+- Added to the system: the forecast job, forecasts with their accuracy on the Stock screen, alerts the facility manager can acknowledge, the delivery cycle and safety buffer settings, outreach session plans with the vaccines needed against stock, attendance recording, FHIR export of a child's record, and administrator screens for accounts, facilities and the schedule.
+- Redesigned the screens for phones first, with light and dark themes and an offline notice. 333 automated tests and 14 browser tests (desktop and phone) pass; the slowest page took 373 ms (95th percentile, without network time).
+
+**Pending:** running the Colab notebook for SARIMA and the GRU, importing the trained models and re-measuring the alerts; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
 
 ## Phase 5: Refinement cycles and testing
 
@@ -255,11 +261,11 @@ While planning, I re-read my proposal and listed items to correct, including fou
 7. Could you review my wireframes and design diagrams (attached)?
 8. For the model comparison, I propose testing on the last 24 weeks (6 periods of 4 weeks) instead of 26, and modelling yearly seasonality in SARIMA with Fourier terms because the standard 52-week seasonal term is too slow for 84 series. Are these acceptable?
 
-# 10. Next seven days (30 September to 6 October)
+# 10. Next seven days (3 to 9 October)
 
 | Task | Output I will show you |
 |---|---|
-| Run the Colab notebook: data check, exploration, backtest of the four models, comparison and selection | Comparison tables per vaccine and the training log entry |
-| Screenshots of every Prototype 1 screen for Chapter 4 | Figures with captions |
-| Gate review of Prototype 1 and tag it as version `p1` | Review notes and the tagged version |
-| Start of the stock-out alerts | Alert rules with tests |
+| Run the Colab notebook: SARIMA and GRU backtests, comparison, selection, alert accuracy | Comparison tables per vaccine and the training log entry |
+| Import the trained models into the system and re-measure the alerts | Updated alert recall and precision |
+| Gate reviews of Prototypes 1 and 2; tag `p1` and `p2` | Review notes and the tagged versions |
+| Prepare the user acceptance test task sheet and SUS questionnaire | Draft for your approval (needs your answer on ethics, question 3) |

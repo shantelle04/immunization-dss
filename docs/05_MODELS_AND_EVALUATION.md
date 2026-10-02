@@ -22,7 +22,7 @@
 
 ## 2. Stock-out alerts (M1)
 
-Projected stock at week t+k = current stock + scheduled receipts up to t+k - cumulative upper-quantile demand to t+k. Alert when projected stock < safety minimum (BR-05) before the next replenishment.
+Projected stock at week t+k = current ledger balance - cumulative (80% upper bound of the forecast x usage factor) to t+k; no receipt is assumed before the expected delivery. Usage factor = (issues + wastage + losses) / issues over the last 12 weeks, because the forecast predicts doses given while stock also falls by discarded vial remainders. Safety minimum at t+k = average weekly use x weeks still to cover until the expected delivery x (1 + buffer) (BR-05; buffer 0.25, D-33). Expected delivery = last receipt + replenishment cycle; if that date has passed (late delivery), the full 4-week horizon is covered. Alert when projected stock < safety minimum in any week before the expected delivery (D-38). Code: `analytics/src/immdss_analytics/forecast/alerts.py`, shared by the evaluation and the application.
 
 | Metric | Definition (against simulator ground truth) |
 |---|---|
@@ -30,6 +30,7 @@ Projected stock at week t+k = current stock + scheduled receipts up to t+k - cum
 | Alert precision | Alerts followed by a true stock-out or true below-minimum week within 4 weeks / all alerts |
 | F1 | Harmonic mean |
 | Lead time | Weeks between alert and the event |
+| Evaluation design | One alert decision per series at each of the 6 backtest origins (504 decisions), from ledger data before the origin and that origin's forecast; scored against the 4 weeks after the origin. Precision counts a true stock-out or a true below-minimum week; strict precision counts stock-outs only |
 
 ## 3. Defaulter classification and priority (M2)
 
@@ -61,3 +62,30 @@ Data-cleaning metric: import validation scored against `imports/import_dirty_tru
 | Data pipeline | pytest | Every C-rule has a fixture test; KDHS reproduction check; simulator validation checks | TC-D-nn |
 | Model | backtest harness | Metrics above, logged per run | TC-M-nn |
 | UAT and usability | Task sheet, SUS (Brooke, 1996), observer notes | 5 to 8 participants (D-12) | TC-UAT-nn |
+
+## 6. Results so far (evidence run `sim-seed42-368707d3`)
+
+Every number below is from a logged run: results ledger entries `evaluate` and `walkthrough` at commit `855d49a`, files in `data/results/sim-seed42-368707d3-baselines/`, training series SHA-256 `279617cf49ee...`. SARIMA and the GRU have not been run yet (Colab, D-14).
+
+**Forecast backtest, baselines (84 series, 6 origins, last 24 weeks)**
+
+| Model | Mean MASE | Median MASE | Series beating seasonal naive | Mean MAE (doses/week) | Mean sMAPE | 80% interval coverage |
+|---|---|---|---|---|---|---|
+| B2 moving average (4 weeks) | 0.766 | 0.724 | 90.5% | 4.69 | 0.375 | 0.812 |
+| B1 seasonal naive | 0.950 | 0.934 | 64.3% | 5.86 | 0.493 | 0.842 |
+
+Bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/week in normal weeks and -0.39 in stock-out weeks; B1 -1.10 and -2.25. Selection (D-21 fallback, no SARIMA or GRU yet): B2 for 64 series, B1 for 20.
+
+**Stock-out alerts with the selected baseline (D-38, buffer 0.25)**
+
+| Measure | Value | D-07 target |
+|---|---|---|
+| Recall (true stock-out weeks alerted within 4 weeks) | 0.914 (181 of 198) | at least 0.95: **not met** |
+| Precision (stock-out or below minimum) | 0.586 | reported |
+| Strict precision (stock-out only) | 0.359 | reported |
+| F1 | 0.714 | reported |
+| Mean lead time | 2.15 weeks | reported |
+
+Sensitivity to the buffer (not a tuned result; the reported value uses D-33): 0.0 gives recall 0.914, precision 0.483; 0.5 gives recall 0.919, precision 0.729. Recall per vaccine ranges from 0.818 (OPV) to 0.978 (MR). The Colab models may change these figures; both will be reported.
+
+**Defaulter categorisation (oracle, doc 05 section 3)**: 10,390 children under 2 across 12 facilities; defaulter status and overdue dose list match the independent oracle for 10,390 of 10,390 (100%); rank order matches for 12 of 12 facilities.
