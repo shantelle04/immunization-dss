@@ -69,7 +69,7 @@ A forecast model learns weekly vaccine use. The series is built only from what a
 
 - One series per facility and vaccine: 12 facilities x 7 vaccines = 84 series.
 - Weekly totals of doses issued, weeks starting Monday, 4 January 2021 to 29 December 2025 (260 weeks).
-- Saved as `weekly_issues.csv` (columns facility_code, antigen_code, week_start, issued, stockout_flag) with `series_manifest.json` (its SHA-256, counts of zero and stock-out weeks), so every training run can say exactly which data it used. For the evidence run: 84 series, 260 weeks, 1,635 stock-out-flagged weeks, 799 zero weeks; built in 2 seconds.
+- Saved as `weekly_issues.csv` (columns facility_code, antigen_code, week_start, issued, stockout_flag) with `series_manifest.json` (its SHA-256, counts of zero and stock-out weeks), so every training run can say exactly which data it used. For the evidence run: 84 series, 260 weeks, 2,290 stock-out-flagged weeks (after the T-03 fix, D-44), 799 zero weeks; built in 2 seconds.
 - Code: `analytics/src/immdss_analytics/forecast/series.py`. It refuses a run that failed validation.
 - Planned for stage 12: the same function builds the series from the database for the nightly job, with a test that the two paths give identical series.
 

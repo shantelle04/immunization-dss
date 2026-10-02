@@ -227,7 +227,10 @@ Every check happens on the server before any data is read: a request without a v
 
 - I tested a late-delivery check for the alerts (D-42): warn when stock would run out if the expected delivery came one week late. It caught every stock-out, but only because it flagged 95.6% of all cases, which is no better than alerting everything, so I did not add it to the system. My reported result stays at recall 0.843 with precision 0.630. My conclusion is that with deliveries this unreliable, a 95% recall cannot be reached at a useful precision by forecasting demand alone; I would like to discuss the target with you (question 2).
 
-**Pending:** tagging the version as `p2`; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
+- I then changed how the alerts are measured to match how the system works: it re-checks stock every night, so I now decide alerts every week instead of once every 4 weeks. Measured this way with the baseline forecasts, every true stock-out week was flagged, 97.3% of them at least one week in advance, and 96.0% of stock-out episodes were warned before they started. This meets my 95% target. The weakness is precision: 70% of all cases are flagged and only 34.8% of flags are followed by a stock-out, against 27.8% if I flagged everything. I keep a dated log of every attempt (doc 15).
+- While testing I found and fixed an error in my stock-out flag for the training data: it missed weeks where stock stayed at zero. After the fix it matches the true stock-out weeks exactly (2,290 of 2,290), so the models must be trained again on the corrected data.
+
+**Pending:** one Colab run for the trained models on the corrected data, including a risk score that should make the alerts more selective; tagging the version as `p2`; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
 
 ## Phase 5: Refinement cycles and testing
 
@@ -272,6 +275,7 @@ While planning, I re-read my proposal and listed items to correct, including fou
 
 | Task | Output I will show you |
 |---|---|
+| Colab run on the corrected data: weekly alert results for the trained models and the risk score | Updated tables in my alert improvement log |
 | Gate review of Prototype 2 and a load test of the dashboards | Review notes and response times under load |
 | Gate reviews of Prototypes 1 and 2; tag `p1` and `p2` | Review notes and the tagged versions |
 | Prepare the user acceptance test task sheet and SUS questionnaire | Draft for your approval (needs your answer on ethics, question 3) |

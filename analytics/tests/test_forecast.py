@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from immdss_analytics.forecast import alerts, guard
+from immdss_analytics.forecast import alert_study, alerts, guard
 from immdss_analytics.forecast import backtest as bt
 from immdss_analytics.forecast.gru import upper_margin
 from immdss_analytics.forecast.guard import TrainingRefused
@@ -46,7 +46,19 @@ def test_stockout_flag_comes_from_the_ledger_balance():
         ]
     )
     flags = list(build_weekly_series(ledger, START, END)["stockout_flag"])
-    assert flags == [False, True, False, False], "T-03: balance reached zero in week 2 only"
+    assert flags == [False, True, True, False], "T-03: empty from week 2 until the Tuesday delivery in week 3"
+
+
+def test_stockout_flag_covers_weeks_that_start_and_stay_at_zero():
+    ledger = _ledger(
+        [
+            ("2021-01-04", "F1", "MR", "opening_balance", 3),
+            ("2021-01-06", "F1", "MR", "issue", -3),
+            ("2021-01-25", "F1", "MR", "receipt", 10),
+        ]
+    )
+    flags = list(build_weekly_series(ledger, START, END)["stockout_flag"])
+    assert flags == [True, True, True, False], "empty until a Monday delivery; that week is not flagged"
 
 
 def test_weeks_outside_the_stock_window_are_dropped():
@@ -228,3 +240,84 @@ def test_upper_margin_sets_the_exceedance_rate_and_can_lower_the_bound():
     high = upper_margin(np.full(2000, 5.0), actual, 0.9)
     assert high < 0, "an upper end that is too high is lowered"
     assert (actual <= 5 + high).mean() == pytest.approx(0.9, abs=0.01)
+
+
+def _study_data():
+    """Two series over 40 weeks: F1 gets a delivery every 4 weeks, F2 every 6 and runs dry in between."""
+    weeks = pd.date_range("2025-01-06", periods=40, freq="W-MON")
+    start = str(weeks[0].date())
+    rows = [(start, "F1", "BCG", "opening_balance", 80), (start, "F2", "BCG", "opening_balance", 40)]
+    for i, w in enumerate(weeks):
+        for fac, every in (("F1", 4), ("F2", 6)):
+            if i and i % every == 0:
+                rows.append((str(w.date()), fac, "BCG", "receipt", 40))
+            if fac == "F1" or i % every < 4:
+                rows.append((str((w + pd.DateOffset(days=1)).date()), fac, "BCG", "issue", -10))
+    ledger = pd.DataFrame(rows, columns=["date", "facility_code", "antigen_code", "kind", "quantity_doses"])
+    series = build_weekly_series(ledger, weeks[0].date(), (weeks[-1] + pd.DateOffset(weeks=1)).date())
+    return ledger, series
+
+
+def test_weekly_origins_leave_a_full_horizon_and_tuning_weeks_precede_test_weeks():
+    test, tune = alert_study.weekly_origins(260, 24), alert_study.weekly_origins(260, 48, 24)
+    assert (test[0], test[-1], len(test)) == (236, 256, 21)
+    assert (tune[0], tune[-1]) == (212, 232) and tune[-1] + bt.HORIZON <= test[0]
+
+
+def test_late_rate_counts_intervals_more_than_a_week_over_the_cycle():
+    assert alert_study.late_rate(np.array([0, 4, 8, 12]), 4) == 0.0
+    assert alert_study.late_rate(np.array([0, 4, 10, 14, 20]), 4) == 0.5
+    assert alert_study.late_rate(np.array([3]), 4) == 0.0
+
+
+def test_features_use_only_weeks_before_the_decision_and_label_only_weeks_after():
+    ledger, series = _study_data()
+    frame = alert_study.features(ledger, series, [20, 28, 38]).set_index(["facility_code", "origin"])
+    f1, f2 = frame.loc[("F1", 20)], frame.loc[("F2", 28)]
+    assert f1["stock_doses"] == 80 + 40 * 4 - 10 * 20 and f1["late_rate"] == 0 and f1["label"] == 0
+    assert f2["late_rate"] == 1.0 and f2["recent_stockout_weeks"] > 0 and f2["label"] == 1
+    assert np.isnan(frame.loc[("F1", 38), "label"]), "the horizon runs past the data: no label"
+    earlier = ledger[pd.to_datetime(ledger["date"]) < "2025-05-26"]
+    cut = alert_study.features(earlier, series, [20]).set_index(["facility_code", "origin"])
+    assert cut.loc[("F1", 20), "stock_doses"] == f1["stock_doses"], "later transactions change nothing"
+
+
+def test_weekly_scoring_separates_early_warning_from_alerts_in_the_stock_out_week():
+    weeks = pd.date_range("2025-06-02", periods=6, freq="W-MON")
+    truth = pd.DataFrame(
+        [
+            ("F1", "BCG", w, i in (3, 4))
+            for i, w in enumerate(pd.date_range(weeks[0], periods=9, freq="W-MON"))
+        ],
+        columns=["facility_code", "antigen_code", "week_start", "stockout"],
+    )
+
+    def decisions(flags):
+        return pd.DataFrame(
+            {"facility_code": "F1", "antigen_code": "BCG", "origin_week": weeks, "alert": flags}
+        )
+
+    early = alert_study.evaluate_weekly(decisions([False, True, False, False, False, False]), truth)
+    assert (early["recall"], early["early_recall"], early["onset_early_recall"]) == (1.0, 1.0, 1.0)
+    assert (early["true_stockout_weeks"], early["onsets"], early["precision_stockout_only"]) == (2, 1, 1.0)
+    assert early["base_rate"] == pytest.approx(5 / 6, abs=1e-4)
+    same_week = alert_study.evaluate_weekly(decisions([False, False, False, True, False, False]), truth)
+    assert same_week["recall"] == 1.0 and same_week["early_recall"] == 0.5
+    assert same_week["onset_early_recall"] == 0.0, "an alert in the week stock runs out is not a warning"
+    silent = alert_study.evaluate_weekly(decisions([False] * 6), truth)
+    assert silent["recall"] == 0.0 and silent["flagged"] == 0
+
+
+def test_late_rate_gate_is_the_strictest_one_that_reaches_the_target_on_ledger_labels():
+    frame = pd.DataFrame({"late_rate": [0.0, 0.0, 0.5, 0.5, 1.0], "label": [0, 1, 1, 1, 1]})
+    base = pd.Series([False, True, False, False, False])
+    late = pd.Series([True, False, True, True, True])
+    assert alert_study.pick_late_rate_gate(frame, base, late) == 0.5
+    assert alert_study.pick_late_rate_gate(frame, base, pd.Series([False] * 5)) == 0.0
+
+
+def test_risk_score_is_refused_off_colab(monkeypatch):
+    monkeypatch.delenv("IMMDSS_ALLOW_TRAINING", raising=False)
+    monkeypatch.setattr(guard.importlib.util, "find_spec", lambda name: None)
+    with pytest.raises(TrainingRefused):
+        alert_study.fit_risk_score(pd.DataFrame(), pd.DataFrame(), 1)
