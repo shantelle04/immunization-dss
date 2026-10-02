@@ -418,6 +418,93 @@ def evaluate_models(args: argparse.Namespace) -> None:
         sys.exit(1)
 
 
+def _wait_for(url: str, seconds: int = 60) -> bool:
+    import urllib.error
+    import urllib.request
+
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=2)
+            return True
+        except urllib.error.HTTPError:
+            return True
+        except OSError:
+            time.sleep(0.5)
+    return False
+
+
+def e2e(args: argparse.Namespace) -> None:
+    """Browser tests (Playwright, installed Chrome) against a separate database with its own accounts."""
+    password = secrets.token_urlsafe(24)
+    shots = ROOT / "docs" / "evidence"
+    backend_env = {
+        **os.environ,
+        **_clinical_env(),
+        "DJANGO_SETTINGS_MODULE": "config.settings_e2e",
+        "IMMDSS_E2E_PASSWORD": password,
+        "DJANGO_CORS_ORIGINS": "http://localhost:5174,http://127.0.0.1:5174",
+    }
+    prepare = run(
+        PY,
+        "-m",
+        "evaluation.e2e_prepare",
+        ROOT / args.run,
+        cwd=ROOT / "backend",
+        heavy=True,
+        exit_on_error=False,
+        extra_env=backend_env,
+    )
+    if prepare.code:
+        record("e2e", [prepare], {"stage": "prepare"})
+        sys.exit(prepare.code)
+    group = (
+        {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        if os.name == "nt"
+        else {"start_new_session": True}
+    )
+    quiet = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL}
+    servers = [
+        subprocess.Popen(
+            [str(PY), "manage.py", "runserver", "127.0.0.1:8001", "--noreload"],
+            cwd=ROOT / "backend",
+            env=backend_env,
+            **group,
+            **quiet,
+        ),
+        subprocess.Popen(
+            [npm(), "run", "dev"],
+            cwd=ROOT / "frontend",
+            env={**os.environ, "IMMDSS_API": "http://127.0.0.1:8001", "IMMDSS_WEB_PORT": "5174"},
+            **group,
+            **quiet,
+        ),
+    ]
+    try:
+        up = _wait_for("http://127.0.0.1:8001/api/v1/auth/me") and _wait_for("http://localhost:5174/")
+        if not up:
+            sys.exit("e2e: the test servers did not start (are ports 8001 and 5174 free?)")
+        result = run(
+            "npx",
+            "playwright",
+            "test",
+            cwd=ROOT / "frontend",
+            exit_on_error=False,
+            extra_env={
+                "E2E_PASSWORD": password,
+                "E2E_BASE_URL": "http://localhost:5174",
+                "E2E_SHOTS": str(shots) if args.screenshots else "",
+            },
+        )
+    finally:
+        for proc in servers:
+            _stop_tree(proc)
+    summary = [ln.strip() for ln in result.output.splitlines() if re.search(r"\d+ (passed|failed)", ln)]
+    record("e2e", [prepare, result], {"summary": summary, "screenshots": bool(args.screenshots)})
+    if result.code:
+        sys.exit(result.code)
+
+
 def run_app(_: argparse.Namespace) -> None:
     """Backend on 127.0.0.1:8000 and the frontend on http://localhost:5173 (API proxied); Ctrl+C stops."""
     env = {**os.environ, **_clinical_env()}
@@ -521,6 +608,10 @@ def main() -> None:
     p_users = sub.add_parser("demo-users", help="create demo accounts; passwords go to .demo_credentials.txt")
     p_users.add_argument("--reset", action="store_true", help="give existing demo users new passwords")
     p_users.set_defaults(func=demo_users)
+    p_e2e = sub.add_parser("e2e", help="browser tests on a separate database (needs Chrome and the db)")
+    p_e2e.add_argument("run", nargs="?", default=DEFAULT_RUN)
+    p_e2e.add_argument("--screenshots", action="store_true", help="save F-UI-*.png to docs/evidence")
+    p_e2e.set_defaults(func=e2e)
     p_fc = sub.add_parser("forecasts", help="store forecasts and refresh stock-out alerts in the database")
     p_fc.add_argument("--results", help="results folder of a Colab training run; default: baselines only")
     p_fc.set_defaults(func=forecasts)

@@ -2,10 +2,10 @@ import type { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
 import type { Role, User } from "./api";
 import { useAuth } from "./auth";
-import { Loading } from "./components";
+import { Loading } from "./ui";
 
 export function homeFor(user: User): string {
-  return user.role === "system_admin" ? "/admin" : "/inventory";
+  return user.role === "system_admin" ? "/admin" : "/overview";
 }
 
 // Hiding screens is convenience only; the server refuses every request a role may not make.

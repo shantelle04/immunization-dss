@@ -65,3 +65,4 @@ exports/
 Thumbs.db
 *.tmp
 ~$*
+playwright-report/

@@ -39,7 +39,7 @@ function csrfToken(): string {
 }
 
 interface Options {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PUT" | "PATCH";
   body?: unknown;
   query?: Record<string, string>;
 }
@@ -64,7 +64,18 @@ async function parse<T>(response: Response): Promise<T> {
   return data as T;
 }
 
-export async function refreshSession(): Promise<User | null> {
+let refreshing: Promise<User | null> | null = null;
+
+// The refresh token is rotated on use, so two refreshes in flight would make the second one fail and sign
+// the user out; every caller shares the one request.
+export function refreshSession(): Promise<User | null> {
+  refreshing ??= requestRefresh().finally(() => {
+    refreshing = null;
+  });
+  return refreshing;
+}
+
+async function requestRefresh(): Promise<User | null> {
   const response = await send("/auth/refresh", { method: "POST" });
   if (!response.ok) {
     setAccessToken(null);
