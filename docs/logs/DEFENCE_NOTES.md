@@ -8,7 +8,7 @@ Per phase: what was built, why, alternatives considered, weaknesses, and likely 
 
 **Why the GRU barely beats SARIMA.** 84 weekly series of 260 weeks are short for a neural network; one global model helps by sharing patterns across facilities, but the simulated demand is mostly smooth seasonality plus noise, which SARIMA with Fourier terms already captures. This matches the expectation in R-03.
 
-**The surprise.** Better point forecasts gave worse alerts (recall 0.843 against 0.914), because the alert rule uses the upper bound of the interval and the GRU's interval is too narrow (coverage 0.786). Accuracy and calibration are different properties; D-41 lists the fixes.
+**The surprise, and what it turned out to be.** Better point forecasts gave worse alerts (recall 0.843 against 0.914). I first blamed the GRU's narrow interval and calibrated it twice (D-41): the forecasts improved (MASE 0.671, coverage 0.806) but recall did not move. Looking at the 28 missed cases showed why: in 24 of them a delivery was expected within the 4 weeks and came late or short. The rule assumes deliveries arrive on time, so no forecast can catch those; the baselines caught more of them only because they forecast slightly too high. The fix belongs in the rule (D-42), not in the model.
 
 **Likely questions**
 1. Is the GRU worth its complexity? (On this data, barely: 0.677 against 0.681. The selection rule keeps SARIMA available, and the result is reported, not hidden.)

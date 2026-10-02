@@ -13,7 +13,7 @@ The main progress this week is the data. Requesting real survey microdata would 
 
 Since the last update I have also frozen my requirements and drafted all the design diagrams and screen sketches from my proposal (section 5, Phase 2), so design is back on the September timeline of my Gantt chart, subject to your review.
 
-I have also built the first prototype ahead of plan: login with the three roles, the database loaded with the synthetic data, and first versions of the inventory, scheduling and child record screens, with 194 automated tests passing. I have also built the second prototype: the system now shows a 4-week vaccine demand forecast with stock-out alerts, plans outreach sessions from the prioritised defaulter list, records attendance, and exports a child's record in the FHIR standard. The screens were redesigned to work on phones first. I trained and compared the forecasting models on Google Colab with a GPU: the GRU neural network was the most accurate (MASE 0.677), just ahead of SARIMA (0.681), and both clearly beat the two simple baselines. The trained forecasts are now used in the system. The stock-out alerts caught 84.3% of true stock-out weeks with the trained models (91.4% with the baselines), below my 95% target; I report this as it is and explain the cause below. The project is in my GitHub repository, which I have made public so that Colab can use it; it holds no real data, secrets or passwords.
+I have also built the first prototype ahead of plan: login with the three roles, the database loaded with the synthetic data, and first versions of the inventory, scheduling and child record screens, with 194 automated tests passing. I have also built the second prototype: the system now shows a 4-week vaccine demand forecast with stock-out alerts, plans outreach sessions from the prioritised defaulter list, records attendance, and exports a child's record in the FHIR standard. The screens were redesigned to work on phones first. I trained and compared the forecasting models on Google Colab with a GPU: the GRU neural network was the most accurate (MASE 0.671), just ahead of SARIMA (0.681), and both clearly beat the two simple baselines. The trained forecasts are now used in the system. The stock-out alerts caught 84.3% of true stock-out weeks with the trained models (91.4% with the baselines), below my 95% target. Most of the misses are caused by late or short deliveries, which my alert rule does not yet consider; I explain this below. The project is in my GitHub repository, which I have made public so that Colab can use it; it holds no real data, secrets or passwords.
 
 # 2. Have I started cleaning the datasets?
 
@@ -223,7 +223,9 @@ Every check happens on the server before any data is read: a request without a v
 
 - I tried to fix the alert recall by calibrating the GRU's uncertainty range on its validation weeks (D-41). It made no difference (recall still 0.843): the range was already right on those weeks, but on the test weeks actual demand went above the GRU's upper bound 13.1% of the time instead of 10%. The GRU gave exactly the same forecasts in both Colab runs, which shows the training is repeatable.
 
-**Pending:** I have now built a calibration of only the upper end of the GRU's range, on weeks the model never sees during training (D-41, option D); one more Colab run will measure it; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
+- I then calibrated only the upper end of the GRU's range on weeks the model never sees in training (D-41). The GRU improved again (MASE 0.671, its range now correct 80.6% of the time), but the alerts did not change (recall 0.843). When I examined the 28 missed stock-outs, 24 happened after a delivery that was expected within the 4 weeks but came late or short. My alert rule assumes deliveries arrive on time, so better forecasts cannot catch these. The next fix belongs in the alert rule, not the model (D-42).
+
+**Pending:** a decision on adding a no-delivery check to the alert rule (D-42); tagging the version as `p2`; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
 
 ## Phase 5: Refinement cycles and testing
 
@@ -268,6 +270,6 @@ While planning, I re-read my proposal and listed items to correct, including fou
 
 | Task | Output I will show you |
 |---|---|
-| Colab run with the upper-end calibration (D-41, option D) | Updated alert recall and precision |
+| Add the no-delivery check to the alert rule if approved (D-42); it runs locally, no training needed | Updated alert recall and precision |
 | Gate reviews of Prototypes 1 and 2; tag `p1` and `p2` | Review notes and the tagged versions |
 | Prepare the user acceptance test task sheet and SUS questionnaire | Draft for your approval (needs your answer on ethics, question 3) |

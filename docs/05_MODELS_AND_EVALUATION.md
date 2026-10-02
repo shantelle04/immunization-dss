@@ -71,12 +71,12 @@ Every number below is from a logged run. Baselines: results ledger entries `eval
 
 | Model | Mean MASE | Median MASE | Series beating seasonal naive | Mean MAE (doses/week) | Mean sMAPE | 80% interval coverage |
 |---|---|---|---|---|---|---|
-| GRU (global) | 0.677 | 0.636 | 96.4% | 4.11 | 0.341 | 0.786 |
+| GRU (global), upper end calibrated (D-41 option D, commit `25f6f70`) | 0.671 | 0.629 | 96.4% | 4.07 | 0.337 | 0.806 |
 | SARIMA (Fourier, D-36) | 0.681 | 0.640 | 96.4% | 4.17 | 0.338 | 0.844 |
 | B2 moving average (4 weeks) | 0.766 | 0.724 | 90.5% | 4.69 | 0.375 | 0.812 |
 | B1 seasonal naive | 0.950 | 0.934 | 64.3% | 5.86 | 0.493 | 0.842 |
 
-The GRU and SARIMA are close: the GRU has the lower MASE overall and for PCV, PENTA and IPV, SARIMA for BCG, MR, OPV and ROTA, and the GRU beats SARIMA on 42 of 84 series. The GRU's 80% interval is too narrow (coverage 0.786 below 0.80). Bias against true demand: GRU -1.05 doses/week in normal weeks and -1.33 in stock-out weeks; SARIMA -0.95 and -1.33. Selection by D-21: GRU for 80 series, SARIMA for 4. Run time on Colab: SARIMA 849 s, GRU 158 s for 6 fits each.
+The GRU and SARIMA are close: the GRU has the lower MASE overall and for PCV, PENTA and IPV, SARIMA for BCG, MR, OPV and ROTA, and the GRU beats SARIMA on 54 of 84 series (42 before calibration). Before calibration the GRU's interval was too narrow (coverage 0.786). Bias against true demand: GRU -0.86 doses/week in normal weeks and -1.24 in stock-out weeks; SARIMA -0.95 and -1.33. Selection by D-21: GRU for 80 series, SARIMA for 4. Run time on Colab: SARIMA 849 s, GRU 158 s for 6 fits each.
 
 Baseline bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/week in normal weeks and -0.39 in stock-out weeks; B1 -1.10 and -2.25.
 
@@ -84,9 +84,9 @@ Baseline bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/we
 
 | Forecasts used by the rule | Recall | Precision | Strict precision | F1 | Mean lead time | D-07 recall target 0.95 |
 |---|---|---|---|---|---|---|
-| D-21 selection (GRU 80, SARIMA 4) | 0.843 (167) | 0.640 | 0.379 | 0.728 | 2.04 weeks | **not met** |
+| D-21 selection (GRU 80, SARIMA 4), current model `25f6f70` | 0.843 (167) | 0.630 | 0.373 | 0.721 | 2.04 weeks | **not met** |
 | Baseline selection (B2 64, B1 20) | 0.914 (181) | 0.586 | 0.359 | 0.714 | 2.15 weeks | **not met** |
 
-The more accurate forecasts give fewer alerts and lower recall, because the rule uses the upper bound of the 80% interval and the GRU's interval is narrower (coverage 0.786). With the D-21 selection, recall per vaccine ranges from 0.636 (OPV) to 0.909 (IPV); a buffer of 0.5 gives recall 0.899 and precision 0.778 (sensitivity only; the reported value uses D-33). D-41 option C (conformal calibration of the GRU interval) was implemented and re-run at commit `03d112c`: coverage 0.787, recall 0.843, precision 0.639, essentially unchanged, because the margin learned on the validation weeks was close to zero. Actual demand exceeded the GRU's upper bound in 13.1% of test weeks (SARIMA 9.1%, moving average 8.7%, target 10%), which is what lowers recall. Next options are in D-41.
+The more accurate forecasts give fewer alerts and lower recall, because the rule uses the upper bound of the 80% interval and the GRU's interval is narrower (coverage 0.786). With the D-21 selection, recall per vaccine ranges from 0.636 (OPV) to 0.909 (IPV); a buffer of 0.5 gives recall 0.899 and precision 0.778 (sensitivity only; the reported value uses D-33). Two calibrations of the GRU interval were tried (D-41). Option C (two-sided, on the early-stopping weeks, commit `03d112c`) changed nothing. Option D (upper end only, on a separate calibration block, commit `25f6f70`, the current model) gave GRU MASE 0.671, coverage 0.806 and upper-bound exceedance 11.0% (target 10%), but alert recall stayed at 0.843 (precision 0.630). The misses are not a forecasting problem: in 24 of the 28 missed stock-out origins the stock-out came after a delivery that was expected within the 4 weeks and arrived late or short, which the rule assumes cannot happen (D-42).
 
 **Defaulter categorisation (oracle, doc 05 section 3)**: 10,390 children under 2 across 12 facilities; defaulter status and overdue dose list match the independent oracle for 10,390 of 10,390 (100%); rank order matches for 12 of 12 facilities.
