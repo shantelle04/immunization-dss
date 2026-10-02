@@ -3,7 +3,9 @@
 Inputs per week: the series scaled by its own training mean, the ledger stock-out flag (T-03) and the week of
 the year (sine and cosine), plus one-hot facility and vaccine identities. Output: the 10th, 50th and 90th
 percentile for each of the next `horizon` weeks, trained with the quantile (pinball) loss, so the 80% interval
-comes from the model itself. Scaling uses training weeks only; TensorFlow loads on the training host only.
+comes from the model itself. That interval is then calibrated on the validation weeks (conformalized quantile
+regression, D-41), so its coverage matches the 80% target. Scaling and calibration use training weeks only;
+TensorFlow loads on the training host only.
 """
 
 from __future__ import annotations
@@ -15,6 +17,7 @@ import numpy as np
 from .models import Forecast
 
 QUANTILES = (0.1, 0.5, 0.9)
+COVERAGE = 0.8
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,19 @@ def _features(values, flags, weeks, key_onehot, scale):
     per_week = np.column_stack([values / scale, flags.astype(float), np.sin(angle), np.cos(angle)])
     static = np.repeat(key_onehot[None, :], len(values), axis=0)
     return np.hstack([per_week, static])
+
+
+def conformal_margin(lo: np.ndarray, hi: np.ndarray, actual: np.ndarray, coverage: float = COVERAGE) -> float:
+    """Margin to add to both interval ends so that `coverage` of the calibration actuals fall inside.
+
+    Conformity score per point: max(lo - y, y - hi), negative when y is inside. The margin is the
+    ceil((n + 1) x coverage) / n empirical quantile of the scores (Romano, Patterson and Candes, 2019); a
+    negative margin narrows an interval that was too wide.
+    """
+    scores = np.maximum(np.asarray(lo) - actual, np.asarray(actual) - hi).ravel()
+    n = len(scores)
+    level = min(1.0, np.ceil((n + 1) * coverage) / n)
+    return float(np.quantile(scores, level, method="higher"))
 
 
 def _windows(feats, target, lookback, horizon):
@@ -108,19 +124,25 @@ def fit_and_forecast(series: dict, weeks, horizon: int, seed: int, params: GruPa
         callbacks=[tf.keras.callbacks.EarlyStopping(patience=params.patience, restore_best_weights=True)],
         verbose=0,
     )
+    # Calibration reuses the early-stopping weeks: they are inside the training window, never test weeks.
+    val_pred = np.sort(model.predict(x[val_idx], verbose=0), axis=2)
+    margin = conformal_margin(val_pred[:, :, 0], val_pred[:, :, 2], y[val_idx])
     predictions = model.predict(np.asarray([last_inputs[k] for k in keys], "float32"), verbose=0)
     out = {}
     for key, pred in zip(keys, predictions, strict=True):
-        pred = np.sort(pred, axis=1) * scales[key]
-        pred = np.clip(pred, 0, None)
+        pred = np.sort(pred, axis=1)
+        point = np.clip(pred[:, 1] * scales[key], 0, None)
+        lo = np.clip((pred[:, 0] - margin) * scales[key], 0, None)
+        hi = np.clip((pred[:, 2] + margin) * scales[key], 0, None)
         out[key] = Forecast(
-            pred[:, 1],
-            pred[:, 0],
-            pred[:, 2],
+            point,
+            np.minimum(lo, point),
+            np.maximum(hi, point),
             "gru",
             {
                 "epochs_run": len(history.history["loss"]),
                 "best_val_loss": float(min(history.history["val_loss"])),
+                "conformal_margin_scaled": round(margin, 4),
             },
         )
     out["_model"] = model

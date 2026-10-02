@@ -9,7 +9,7 @@
 | Candidates | B1 seasonal naive (same week last year, or last 4-week mean when history is short); B2 moving average of the last 4 weeks (proposal's comparison point); SARIMA (statsmodels; ARIMA orders (1,0,0), (0,1,1), (1,1,1), (2,0,1), each with and without 2 Fourier harmonics of the 52.18-week year for seasonality (D-36), chosen by AIC on the training window); GRU (Keras, one global model across all 84 series, lookback 26 weeks, inputs: scaled series, ledger stock-out flag, week-of-year sine and cosine, one-hot facility and antigen) |
 | Selection per series | GRU when the series has at least 104 weeks and beats B1 on its backtest; else SARIMA; if history is under 26 weeks, a population-based estimate (catchment births x schedule x coverage). Proposal says "ARIMA fallback for facilities with no history"; ARIMA cannot fit without history, so this is logged as D-21 |
 | Validation | Rolling-origin backtest: 6 origins of 4 weeks covering the last 24 weeks (D-35), every model refit at each origin on the weeks before it only; scalers fit on training windows only; GRU early stopping uses the last 15% of the training weeks as a time-based hold-out |
-| Intervals | 80% intervals: SARIMA native intervals; GRU from the quantile (pinball) loss at 0.1, 0.5 and 0.9; baselines from the 10th and 90th percentiles of in-sample residuals |
+| Intervals | 80% intervals: SARIMA native intervals; GRU from the quantile (pinball) loss at 0.1, 0.5 and 0.9, widened or narrowed by a conformal margin from the validation weeks so that coverage targets 80% (D-41); baselines from the 10th and 90th percentiles of in-sample residuals |
 
 **Metrics**
 
@@ -87,6 +87,6 @@ Baseline bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/we
 | D-21 selection (GRU 80, SARIMA 4) | 0.843 (167) | 0.640 | 0.379 | 0.728 | 2.04 weeks | **not met** |
 | Baseline selection (B2 64, B1 20) | 0.914 (181) | 0.586 | 0.359 | 0.714 | 2.15 weeks | **not met** |
 
-The more accurate forecasts give fewer alerts and lower recall, because the rule uses the upper bound of the 80% interval and the GRU's interval is narrower (coverage 0.786). With the D-21 selection, recall per vaccine ranges from 0.636 (OPV) to 0.909 (IPV); a buffer of 0.5 gives recall 0.899 and precision 0.778 (sensitivity only; the reported value uses D-33). Which forecasts the alert rule should use is an open decision (D-41).
+The more accurate forecasts give fewer alerts and lower recall, because the rule uses the upper bound of the 80% interval and the GRU's interval is narrower (coverage 0.786). With the D-21 selection, recall per vaccine ranges from 0.636 (OPV) to 0.909 (IPV); a buffer of 0.5 gives recall 0.899 and precision 0.778 (sensitivity only; the reported value uses D-33). D-41 (option C, conformal calibration of the GRU interval) is implemented; the figures above are from before it and will be re-measured in the next Colab run.
 
 **Defaulter categorisation (oracle, doc 05 section 3)**: 10,390 children under 2 across 12 facilities; defaulter status and overdue dose list match the independent oracle for 10,390 of 10,390 (100%); rank order matches for 12 of 12 facilities.
