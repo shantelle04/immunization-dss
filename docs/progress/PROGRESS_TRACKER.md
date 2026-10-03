@@ -232,7 +232,9 @@ Every check happens on the server before any data is read: a request without a v
 
 - I retrained all models on the corrected data on Colab: the results are the same as before (GRU MASE 0.671), and the new forecasts are now in the system. The last step of that run, the risk score, failed because of an error in my code; I fixed it and added a test that runs the whole step on my laptop with a stand-in model.
 
-**Pending:** one more Colab run for the weekly alert results of the trained models and the risk score; tagging the version as `p2`; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
+- The final Colab run completed the study. With my trained models and the nightly check the system already does, the alerts caught 99.5% of true stock-out weeks, 94.0% of them at least a week in advance. A risk score I trained caught 98.4% a week ahead but flagged 85% of all vaccine-weeks, so I do not recommend it. Overall, the alerts improved from catching 66% of stock-out weeks in my first version to 99.5% now; what remains weak is selectivity, because most stock-outs in the data come from deliveries that are too small, which is hard to see in advance.
+
+**Pending:** my decision on the alert method (D-45, I recommend keeping the current rule); tagging the version as `p2`; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
 
 ## Phase 5: Refinement cycles and testing
 
@@ -277,7 +279,6 @@ While planning, I re-read my proposal and listed items to correct, including fou
 
 | Task | Output I will show you |
 |---|---|
-| Colab run on the corrected data: weekly alert results for the trained models and the risk score | Updated tables in my alert improvement log |
 | Gate review of Prototype 2 and a load test of the dashboards | Review notes and response times under load |
 | Gate reviews of Prototypes 1 and 2; tag `p1` and `p2` | Review notes and the tagged versions |
 | Prepare the user acceptance test task sheet and SUS questionnaire | Draft for your approval (needs your answer on ethics, question 3) |

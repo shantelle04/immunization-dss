@@ -2,6 +2,17 @@
 
 Per phase: what was built, why, alternatives considered, weaknesses, and likely panel questions with answers.
 
+## Phase 4d: improving the stock-out alerts (2026-10-03)
+
+**What improved.** Recall went from 0.657 to 0.995 on the evaluation that matches the nightly check in the app; 94.0% of stock-out weeks get at least a week of warning. Every step is in doc 15.
+
+**What did not.** Selectivity: the best lift is 1.31. A risk score (logistic regression on ledger features) ranked stock-outs better than any single signal (AUC 0.712 against 0.655) but, held to 95% recall, flagged 85% of vaccine-weeks.
+
+**Likely questions**
+1. Did you change the measurement to pass the target? (I changed it to match how the system runs: stock is re-checked every night, so judging only one decision every 4 weeks understated it. I report both, and the stricter early-warning measures.)
+2. Why not use the risk score if it warns earlier? (Because it flags 85% of vaccine-weeks; alerts that fire almost always are ignored. The choice is the author's, D-45.)
+3. Was the risk score tuned on the test weeks? (No: trained on weeks 64 to 208, threshold set on the 24 weeks before the test weeks using the ledger's own flag; the test weeks were scored once.)
+
 ## Phase 4c: model comparison on Colab (2026-10-02)
 
 **Result.** GRU MASE 0.677, SARIMA 0.681, moving average 0.766, seasonal naive 0.950 (84 series, 24 test weeks). Both trained models beat seasonal naive on 96.4% of series. Full tables: `docs/evidence/M1_model_comparison_sim-seed42-368707d3.md`.

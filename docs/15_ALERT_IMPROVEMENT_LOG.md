@@ -20,7 +20,9 @@ D-07 (proposed, for the supervisor): alert recall at least 0.95 at a 4-week hori
 | 8 | 2026-10-02 | Delivery-history gate (D-43 stage 2): raise the late-delivery warning only for series whose past deliveries were late | baselines | 1.000; early 1.000 | 0.289 (lift 1.04) | 1,677 of 1,764 | No gain: deliveries are rarely late by more than a week (late rate 0 for 73.8% of tuning decisions, never above 0.25), so the gate cannot separate series. Negative result |
 | 9 | 2026-10-02 | Fix of the ledger stock-out flag (T-03, D-44), found while testing stage 3 | - | - | - | - | The flag missed weeks that start and stay at zero stock. After the fix it marks 2,290 weeks, exactly the simulator's true stock-out weeks, without reading `truth/`. Training series hash changed |
 | 10 | 2026-10-03 | Retrain all models on the corrected series (Colab run `4858e7f`) | GRU 80, SARIMA 4 | 0.843 | 0.373 | 316 of 504 | Same alert result as before the fix; GRU MASE 0.671, coverage 0.804, MAE on weeks without a stock-out 3.65. The weekly study step crashed on a column clash in the risk-score code (the GRU and SARIMA weekly forecasts were computed, about 17 minutes, but not saved). Fixed, an end-to-end test with a stand-in model added, and weekly forecasts are now saved before the risk step |
-| 11 | pending | Weekly decisions with the trained models, and the risk score (D-43 stage 3) | Colab | pending | pending | pending | Needs one more Colab run |
+| 11 | 2026-10-03 | Weekly decisions with the trained models (Colab run `625841d`) | GRU 80, SARIMA 4 | 0.995; early 0.940; onset early 0.913 | 0.364 (lift 1.31) | 1,091 of 1,764 | Recall met; early warning just under target (0.940); the most selective method tried (61.9% flagged, highest lift) |
+| 12 | 2026-10-03 | Risk score (D-43 stage 3): logistic regression on 11 ledger features, trained on 12,180 earlier decisions, threshold set on the 24 tuning weeks to keep 95% recall on ledger labels | GRU 80, SARIMA 4 | 0.995; early 0.984; onset early 0.976 | 0.307 (lift 1.10) | 1,506 of 1,764 | Best early warning, but flags 85.4%. Ranks stock-outs moderately well (AUC 0.712 on the test weeks against truth, against 0.655 for weeks of stock alone); at a 95% recall threshold it cannot be selective. Not proposed for the app |
+| 13 | 2026-10-03 | Risk score or rule; delivery-history gate with trained models | GRU 80, SARIMA 4 | 1.000; early 0.995 | 0.305 (lift 1.09); gate 0.294 (lift 1.06) | 1,552 and 1,651 of 1,764 | No gain over rows 11 and 12; the gate threshold chosen on the tuning weeks was 0, so it changes nothing |
 
 Rows 1 to 6 use the 4-weekly evaluation (504 decisions, 198 true stock-out weeks); rows 7 and 8 the weekly evaluation (1,764 decisions, 183 true stock-out weeks counted, 126 episode starts). The two are not directly comparable: see section 3.
 
@@ -53,19 +55,23 @@ Even a nearly empty store avoids a stock-out more often than not, because the ne
 
 ## 5. Current position
 
-| Measure (weekly evaluation, baselines) | Value | Target |
-|---|---|---|
-| Recall | 1.000 | 0.95: met |
-| Early recall (at least one week of warning) | 0.973 | 0.95: met |
-| Onset early recall | 0.960 | 0.95: met |
-| Strict precision | 0.348 | reported |
-| Base rate, lift | 0.278, 1.25 | reported |
-| Share of decisions flagged | 70.0% | reported |
+| Weekly evaluation, last 24 weeks | Rule with trained models (in the app) | Risk score | Rule with baselines | Target |
+|---|---|---|---|---|
+| Recall | 0.995 | 0.995 | 1.000 | 0.95: met by all |
+| Early recall (at least one week of warning) | 0.940 | 0.984 | 0.973 | 0.95 |
+| Onset early recall | 0.913 | 0.976 | 0.960 | 0.95 |
+| Strict precision | 0.364 | 0.307 | 0.348 | reported |
+| Lift over flagging everything (base rate 0.278) | 1.31 | 1.10 | 1.25 | reported |
+| Share of vaccine-weeks flagged | 61.9% | 85.4% | 70.0% | reported |
 
-The recall target is met on a definition that matches how the system runs, but the alerts are not selective: 7 in 10 vaccine-weeks are flagged. The remaining work is precision, which is what the risk score is for.
+**Improvement achieved.** From the starting point (row 1: recall 0.657) to now, recall rose above the 0.95 target on the evaluation that matches how the system runs (nightly checks): 99.5% of true stock-out weeks are flagged, 94.0% with at least a week of warning, using the trained models already in the application. Every method meets the recall target; they differ in how early they warn and how many vaccine-weeks they flag.
+
+**The limit, stated plainly.** No method tried is selective: the best lift is 1.31, so an alert means a stock-out is about 1.3 times as likely as for a vaccine picked at random. The data explains why (section 4): in this simulation most stock-outs come from short deliveries, which the ledger shows only weakly in advance. Any rule tuned to 95% recall therefore flags most vaccine-weeks.
+
+**Choice for the author (D-45).** Keep the current rule (fewest alerts, early recall 0.940) or switch to the risk score (early recall 0.984, but 85% of vaccine-weeks flagged). Recommendation: keep the rule; it already meets the recall target and the risk score's extra early warnings cost a large rise in alerts, which in practice leads to alerts being ignored.
 
 ## 6. Next
 
-1. Colab run at the new commit: weekly forecasts for the selected models and the risk score. Record row 11.
-2. If the risk score has a better lift at 0.95 recall than the rule, propose it for the application (author decides).
-3. Raise the precision question with the supervisor alongside D-07.
+1. Author decision D-45.
+2. Raise the precision question with the supervisor alongside D-07: the target as written (recall 0.95) is met; precision should be agreed as a reported measure, not a pass mark.
+3. Future work for the thesis: learn delivery size and reliability per facility (supply-side forecasting); this is where the remaining errors come from.
