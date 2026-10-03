@@ -1,6 +1,6 @@
 # 12. Data pipeline: from generation to trained models, in order
 
-What each stage does, which script runs it, where its output is stored, and what is still planned. Stages 1 to 6 are done and evidenced. Stages 7 and 8 are built and tested; stages 9 to 11 are built and run only on Google Colab (D-14) through `notebooks/immdss_colab_pipeline.ipynb`; nothing has been trained yet. Stage 12 is built: the app runs the baselines until Colab results are imported (D-39). Evidence run: `sim-seed42-368707d3`.
+What each stage does, which script runs it, where its output is stored, and what is still planned. All 12 stages are done and evidenced. Stages 9 to 11 ran on Google Colab (D-14) through `notebooks/immdss_colab_pipeline.ipynb`; the final run is `625841d`, and its forecasts are in the application (stage 12). Results of every stage and how each was improved: doc 16. Evidence run: `sim-seed42-368707d3`.
 
 **Basis for synthetic data (D-02).** No facility-level dataset of weekly vaccine stock and child vaccination records is publicly available for Kenya (KHIS and the logistics system need official access), and real child records would need ethics approval. Using simulated data where no dataset exists is allowed (confirmed by the author, 29 September 2026) and matches proposal 1.7 ("only simulated patient data will be used for development and testing").
 
@@ -14,11 +14,11 @@ What each stage does, which script runs it, where its output is stored, and what
 | 4 | Explore (EDA) | `python3 scripts/dev.py eda` | `docs/evidence/` (versioned) | Done: F-D1 to F-D8, T-5.1 |
 | 5 | Load into the system | `python3 scripts/dev.py load` | PostgreSQL, Docker volume `immdss_pgdata` | Done: 60 s |
 | 6 | Measure import cleaning | `python3 scripts/dev.py walkthrough` | `docs/evidence/P1_walkthrough_<run_id>.md` | Done: 119 of 120 caught |
-| 7 | Build training series | `immdss build-series` | `data/processed/<run_id>/` (local) or `results/series/` (Colab) | Built, tested |
-| 8 | Clean the training series | inside stage 7 | same | Built, tested |
-| 9 | Split for evaluation | inside stage 10 | none (rules only) | Built, tested |
-| 10 | Train and backtest | `immdss backtest`, `immdss train-final` (Colab only) | `results/` on Colab, downloaded as a zip; the training log | Built; not yet run |
-| 11 | Compare, select, evaluate against truth | inside stage 10 | same | Built; not yet run |
+| 7 | Build training series | `immdss build-series` | `data/processed/<run_id>/` (local) or `results/series/` (Colab) | Done: 84 series x 260 weeks |
+| 8 | Clean the training series | inside stage 7 | same | Done: 2,290 stock-out weeks flagged from the ledger (D-44) |
+| 9 | Split for evaluation | inside stage 10 | none (rules only) | Done: 6 cut-offs, last 24 weeks |
+| 10 | Train and backtest | `immdss backtest`, `immdss train-final` (Colab only) | `results/` on Colab, downloaded as a zip; the training log | Done: GRU MASE 0.671, SARIMA 0.681 |
+| 11 | Compare, select, evaluate against truth | `immdss evaluate-alerts`, `immdss alert-study` | same | Done: alerts 99.5% of stock-out weeks (weekly checks); defaulters 100% |
 | 12 | Use in the system | `dev.py forecasts [--results DIR]` (`manage.py run_forecasts`, nightly by cron) | Forecast and StockAlert tables | Built, tested |
 
 ## Stage 1. Configure

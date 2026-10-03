@@ -65,34 +65,33 @@ Data-cleaning metric: import validation scored against `imports/import_dirty_tru
 | Model | backtest harness | Metrics above, logged per run | TC-M-nn |
 | UAT and usability | Task sheet, SUS (Brooke, 1996), observer notes | 5 to 8 participants (D-12) | TC-UAT-nn |
 
-## 6. Results so far (evidence run `sim-seed42-368707d3`)
+## 6. Final results (evidence run `sim-seed42-368707d3`)
 
-Every number below is from a logged run. Baselines: results ledger entries `evaluate` and `walkthrough` at commit `855d49a`, files in `data/results/sim-seed42-368707d3-baselines/`. All four models: Colab run at commit `ff1ff0b` (Tesla T4), full tables in `docs/evidence/M1_model_comparison_sim-seed42-368707d3.md`. Training series SHA-256 `279617cf49ee...` in both.
+Every number is from a logged run: the final Colab run at commit `625841d` (Tesla T4; full tables in `docs/evidence/M1_model_comparison_sim-seed42-368707d3.md`, training log `colab-625841d`), the local baseline run in the results ledger (`evaluate`), and the walkthrough at commit `b63ac3b`. Training series SHA-256 `9e4e6a4edda1...` (after the T-03 fix, D-44). How the results were reached, including every failed attempt: doc 15 (alerts) and doc 16 (all stages).
 
-**Forecast backtest, all models (84 series, 6 origins, last 24 weeks; Colab `ff1ff0b`)**
+### 6.1 Forecast accuracy (84 series, 6 origins, last 24 weeks)
 
-| Model | Mean MASE | Median MASE | Series beating seasonal naive | Mean MAE (doses/week) | Mean sMAPE | 80% interval coverage |
-|---|---|---|---|---|---|---|
-| GRU (global), upper end calibrated (D-41 option D, commit `25f6f70`) | 0.671 | 0.629 | 96.4% | 4.07 | 0.337 | 0.806 |
-| SARIMA (Fourier, D-36) | 0.681 | 0.640 | 96.4% | 4.17 | 0.338 | 0.844 |
-| B2 moving average (4 weeks) | 0.766 | 0.724 | 90.5% | 4.69 | 0.375 | 0.812 |
-| B1 seasonal naive | 0.950 | 0.934 | 64.3% | 5.86 | 0.493 | 0.842 |
+| Model | Mean MASE | Median MASE | Series beating seasonal naive | Mean MAE (doses/week) | MAE without stock-out weeks | Mean sMAPE | 80% interval coverage |
+|---|---|---|---|---|---|---|---|
+| GRU (global, upper end calibrated, D-41 D) | **0.671** | 0.633 | 96.4% | 4.08 | 3.65 | 0.337 | 0.804 |
+| SARIMA (Fourier seasonality, D-36) | 0.681 | 0.640 | 96.4% | 4.17 | 3.79 | 0.338 | 0.844 |
+| B2 moving average (4 weeks) | 0.766 | 0.724 | 90.5% | 4.69 | 4.34 | 0.375 | 0.812 |
+| B1 seasonal naive | 0.950 | 0.934 | 64.3% | 5.86 | 5.56 | 0.493 | 0.842 |
 
-The GRU and SARIMA are close: the GRU has the lower MASE overall and for PCV, PENTA and IPV, SARIMA for BCG, MR, OPV and ROTA, and the GRU beats SARIMA on 54 of 84 series (42 before calibration). Before calibration the GRU's interval was too narrow (coverage 0.786). Bias against true demand: GRU -0.86 doses/week in normal weeks and -1.24 in stock-out weeks; SARIMA -0.95 and -1.33. Selection by D-21: GRU for 80 series, SARIMA for 4. Run time on Colab: SARIMA 849 s, GRU 158 s for 6 fits each.
+The GRU and SARIMA are close: the GRU is better on 50 of 84 series and has the lower MASE for IPV, PCV and PENTA; SARIMA for BCG, MR, OPV and ROTA. Selection by D-21: GRU for 80 series, SARIMA for 4. Bias against true demand (`truth/`, evaluation only), doses per week in normal and stock-out weeks: GRU -0.79 and -1.48, SARIMA -0.90 and -1.70, B2 -0.31 and -1.22, B1 -1.01 and -2.76. Colab run time for 6 fits: SARIMA 742 s, GRU 131 s. Forecast target "MASE under 1 on the majority of series" (section 4): **met** by both trained models (96.4%).
 
-Baseline bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/week in normal weeks and -0.39 in stock-out weeks; B1 -1.10 and -2.25.
+### 6.2 Stock-out alerts
 
-**Stock-out alerts (D-38, buffer 0.25, 504 decisions, 198 true stock-out weeks)**
+| Evaluation | Method | Recall | Early recall | Onset early recall | Strict precision | Lift | Flagged | D-07 recall 0.95 |
+|---|---|---|---|---|---|---|---|---|
+| Weekly (D-43, matches the nightly check) | Rule, trained models (in the app) | 0.995 | 0.940 | 0.913 | 0.364 | 1.31 | 61.9% | **met** |
+| Weekly | Risk score (D-43 stage 3) | 0.995 | 0.984 | 0.976 | 0.307 | 1.10 | 85.4% | met |
+| Weekly | Rule, baselines | 1.000 | 0.973 | 0.960 | 0.348 | 1.25 | 70.0% | met |
+| 4-weekly (one decision per 4 weeks) | Rule, trained models | 0.843 | - | - | 0.373 | - | 62.7% | not met |
+| 4-weekly | Rule, baselines | 0.914 | - | - | 0.359 | - | 71.8% | not met |
 
-| Forecasts used by the rule | Recall | Precision | Strict precision | F1 | Mean lead time | D-07 recall target 0.95 |
-|---|---|---|---|---|---|---|
-| D-21 selection (GRU 80, SARIMA 4), current model `25f6f70` | 0.843 (167) | 0.630 | 0.373 | 0.721 | 2.04 weeks | **not met** |
-| Baseline selection (B2 64, B1 20) | 0.914 (181) | 0.586 | 0.359 | 0.714 | 2.15 weeks | **not met** |
+Base rate (share of decisions followed by a true stock-out): 0.278 weekly. The risk score ranks stock-outs better than weeks of stock alone (AUC 0.712 against 0.655 on the test weeks) but, held to 95% recall, flags most vaccine-weeks. Precision stays low for every method because most stock-outs come from short deliveries, which the ledger shows only weakly in advance (doc 15 section 4). Which method the application uses is D-45.
 
-The more accurate forecasts give fewer alerts and lower recall, because the rule uses the upper bound of the 80% interval and the GRU's interval is narrower (coverage 0.786). With the D-21 selection, recall per vaccine ranges from 0.636 (OPV) to 0.909 (IPV); a buffer of 0.5 gives recall 0.899 and precision 0.778 (sensitivity only; the reported value uses D-33). Two calibrations of the GRU interval were tried (D-41). Option C (two-sided, on the early-stopping weeks, commit `03d112c`) changed nothing. Option D (upper end only, on a separate calibration block, commit `25f6f70`, the current model) gave GRU MASE 0.671, coverage 0.806 and upper-bound exceedance 11.0% (target 10%), but alert recall stayed at 0.843 (precision 0.630). The misses are not a forecasting problem: in 24 of the 28 missed stock-out origins the stock-out came after a delivery that was expected within the 4 weeks and arrived late or short, which the rule assumes cannot happen (D-42).
+### 6.3 Defaulter categorisation
 
-**Late-delivery check (D-42, evaluated, not used in the app).** Adding a warning when stock would run out if the expected delivery came one week late raises recall to 1.0, but only by flagging 95.6% of all decisions (482 of 504); precision falls to 0.473 (strict 0.303). With two weeks, 98.8% are flagged. D-07 requires precision beside recall precisely so that the target cannot be met by alerting everything, so the reported result remains recall 0.843 and precision 0.630, and the 0.95 target is **not met**. True stock-outs occur at 146 of the 504 decisions (29%).
-
-**Weekly evaluation (D-43), baselines, commit of the results ledger entry `evaluate` on 2026-10-02.** Deciding every week, as the application does, the same rule reaches recall 1.000, early recall 0.973 and onset early recall 0.960, so the 0.95 target is met on this definition, at strict precision 0.348 against a base rate of 0.278 (lift 1.25) with 70.0% of decisions flagged. A delivery-history gate on the late-delivery warning gave no gain (lift 1.04). The full sequence of attempts is in doc 15; results for the trained models and the risk score are pending the next Colab run. After the T-03 fix (D-44) the training series hash is `9e4e6a4edda1...`; all models were retrained on the corrected series (Colab `4858e7f`): GRU MASE 0.671, coverage 0.804, SARIMA and baselines unchanged, alert recall 0.843 and precision 0.630 as before. Weekly results with the trained models (Colab `625841d`): recall 0.995, early recall 0.940, onset early recall 0.913, strict precision 0.364, lift 1.31, 61.9% of decisions flagged. Risk score: recall 0.995, early recall 0.984, onset early recall 0.976, lift 1.10, 85.4% flagged, AUC 0.712 against truth on the test weeks. Full sequence: doc 15.
-
-**Defaulter categorisation (oracle, doc 05 section 3)**: 10,390 children under 2 across 12 facilities; defaulter status and overdue dose list match the independent oracle for 10,390 of 10,390 (100%); rank order matches for 12 of 12 facilities.
+10,390 children under 2 across 12 facilities: defaulter status and overdue dose list match the independent oracle for 10,390 of 10,390 (100%); rank order matches at 12 of 12 facilities. Target (section 4): **met**.

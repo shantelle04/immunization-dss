@@ -2,7 +2,7 @@
 title: "Project Progress Report"
 subtitle: "A Web-Based Decision Support System for Healthcare Workers to Address Childhood Immunization Gaps through Predictive Analytics and Smart Scheduling"
 author: "Muthomi, Shantelle Nkatha (168873), BBIT 4D. Supervisor: Mr. Titus Tunduny"
-date: "Status as of 2 October 2026"
+date: "Status as of 3 October 2026"
 ---
 
 # 1. Summary
@@ -123,9 +123,38 @@ My proposal (section 3.8.4) defines three roles. I have added two rules: every u
 
 Every check happens on the server before any data is read: a request without a valid login is refused (401), and a user without the right role or facility is refused (403). The screens only hide what a role cannot use. Still to add, as the proposal requires: viewing forecasts and stock-out alerts (health worker read, manager read and acknowledge) and stock settings for the manager in Phase 4, and schedule editing by the administrator in a later phase.
 
-# 6. Phase status
+# 6. Results by stage
 
-**Table 6: Phase status**
+**Table 6: What each stage achieved**
+
+| Stage | What I did | Result |
+|---|---|---|
+| Synthetic data | Built and calibrated the generator; 11 automatic checks | Coverage within 2.5 points of KDHS 2022 for all 16 doses; all checks pass; identical on every rebuild |
+| Requirements and design | Requirements, nine diagrams, wireframes | 26 functional and 11 non-functional requirements, 9 business rules |
+| Prototype 1 | Login with roles, database, three module screens | 100% accuracy against the true data; import caught 119 of 120 planted errors, rejected 0 of 697 clean rows |
+| Forecasting | Four models compared on the last 24 weeks, trained on Colab | GRU most accurate (MASE 0.671), SARIMA close (0.681); both beat the simple method on 96.4% of series |
+| Stock-out alerts | Nine improvement steps, each measured (Table 7) | 99.5% of stock-out weeks flagged, 94.0% at least a week ahead; precision low |
+| Defaulter list | Ranking and outreach plans | Matches an independent checking script for all 10,390 children (100%) |
+| Prototype 2 | Forecasts, alerts, outreach plans, health passport export, administration, phone-first screens | 343 automated and 14 browser tests pass; slowest dashboard 0.26 seconds |
+
+**Table 7: How I improved the stock-out alerts**
+
+| Step | What I changed | Share of stock-out weeks caught |
+|---|---|---|
+| 1 | First version, checked every 4 weeks | 66% |
+| 2 | Counted the doses lost from opened vials | 91% |
+| 3 | Used the trained models | 84% (more accurate forecasts gave fewer alerts) |
+| 4 to 5 | Calibrated the GRU's uncertainty range twice | 84% (forecasts improved, alerts did not) |
+| 6 | Warned if a delivery came one week late | 100%, but flagged 96% of cases, so rejected |
+| 7 | Checked every week, as the system does | 99.5% (94.0% a week ahead): target met |
+| 8 | Used each facility's delivery history | no gain |
+| 9 | Trained a risk score | 99.5% (98.4% a week ahead) but flagged 85% of cases, so not recommended |
+
+The full log is in my repository (doc 15), and all results by stage are in doc 16.
+
+# 7. Phase status
+
+**Table 8: Phase status**
 
 | # | Phase | Planned dates | Status |
 |---|---|---|---|
@@ -140,7 +169,7 @@ Every check happens on the server before any data is read: a request without a v
 | 7 | Documentation (Chapters 4 to 6) | 5 Oct to 15 Nov | Not started |
 | 8 | System demonstration | 16 to 22 Nov | Not started |
 
-# 7. Phase by phase
+# 8. Phase by phase
 
 ## Phase 0: Setup
 
@@ -201,7 +230,7 @@ Every check happens on the server before any data is read: a request without a v
 - Built the first screens (React): login, inventory, scheduling, child records and user administration. 6 frontend tests pass.
 - Loaded the synthetic data into the database (60 seconds) and ran a scripted walkthrough: stock balances matched for 84 of 84 facility and vaccine pairs, child histories for 200 of 200 sampled children, and the CSV import caught 119 of 120 planted errors while rejecting 0 of 697 clean rows. The slowest page request took 326 ms (95th percentile).
 
-**Pending:** screenshots of every screen for Chapter 4, the gate review, and tagging the version as `p1`.
+**Pending:** the gate review and tagging the version as `p1`. Screenshots of every screen are done (F-UI-01 to F-UI-11, desktop and phone).
 
 ## Phase 4: Model training and Prototype 2
 
@@ -260,11 +289,11 @@ Every check happens on the server before any data is read: a request without a v
 
 **Pending:** all.
 
-# 8. Corrections I found in my proposal
+# 9. Corrections I found in my proposal
 
 While planning, I re-read my proposal and listed items to correct, including four in-text citations missing from the reference list, four references that are never cited, a missing description of user acceptance testing in section 3.6, and an inconsistency about whether the health passport needs a live database connection. Sections 3.3 and 3.2.1 will also need to describe the synthetic, calibrated data in place of secondary datasets. I will correct these in my own words for the final report.
 
-# 9. Where I need your input
+# 10. Where I need your input
 
 1. Is the fully synthetic dataset, calibrated to the KDHS 2022 coverage figures, acceptable in place of the secondary datasets described in section 3.3 of my proposal?
 2. My proposal targets "more than 95% accuracy" for stock alerts and defaulter categorisation. I propose to measure it as (a) at least 95% of true stock-outs alerted up to 4 weeks ahead, with the false alarm rate also reported, and (b) defaulter status matching the true status for at least 95% of children. Is this acceptable?
@@ -275,7 +304,7 @@ While planning, I re-read my proposal and listed items to correct, including fou
 7. Could you review my wireframes and design diagrams (attached)?
 8. For the model comparison, I propose testing on the last 24 weeks (6 periods of 4 weeks) instead of 26, and modelling yearly seasonality in SARIMA with Fourier terms because the standard 52-week seasonal term is too slow for 84 series. Are these acceptable?
 
-# 10. Next seven days (3 to 9 October)
+# 11. Next seven days (3 to 9 October)
 
 | Task | Output I will show you |
 |---|---|
