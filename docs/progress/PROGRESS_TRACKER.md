@@ -230,7 +230,9 @@ Every check happens on the server before any data is read: a request without a v
 - I then changed how the alerts are measured to match how the system works: it re-checks stock every night, so I now decide alerts every week instead of once every 4 weeks. Measured this way with the baseline forecasts, every true stock-out week was flagged, 97.3% of them at least one week in advance, and 96.0% of stock-out episodes were warned before they started. This meets my 95% target. The weakness is precision: 70% of all cases are flagged and only 34.8% of flags are followed by a stock-out, against 27.8% if I flagged everything. I keep a dated log of every attempt (doc 15).
 - While testing I found and fixed an error in my stock-out flag for the training data: it missed weeks where stock stayed at zero. After the fix it matches the true stock-out weeks exactly (2,290 of 2,290), so the models must be trained again on the corrected data.
 
-**Pending:** one Colab run for the trained models on the corrected data, including a risk score that should make the alerts more selective; tagging the version as `p2`; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
+- I retrained all models on the corrected data on Colab: the results are the same as before (GRU MASE 0.671), and the new forecasts are now in the system. The last step of that run, the risk score, failed because of an error in my code; I fixed it and added a test that runs the whole step on my laptop with a stand-in model.
+
+**Pending:** one more Colab run for the weekly alert results of the trained models and the risk score; tagging the version as `p2`; tagging the version as `p2`. Choices for your review: a 24-week test period instead of 26 (D-35), yearly seasonality in SARIMA with Fourier terms (D-36), and the alert rule details (D-38).
 
 ## Phase 5: Refinement cycles and testing
 

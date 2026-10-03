@@ -14,6 +14,7 @@ from .series import build_weekly_series, read_series, write_series
 SERIES_FILE = "weekly_issues.csv"
 SENSITIVITY_BUFFERS = (0.0, 0.1, 0.25, 0.5)
 GRACE_WEEKS = (1, 2, 3)
+STUDY_KEY = ["facility_code", "antigen_code", "origin_week"]
 WITH_WARNINGS_KEYS = (
     "alerts",
     "true_stockout_weeks_alerted",
@@ -149,10 +150,17 @@ def run_alert_study(run_dir: Path, series_path: Path, results: Path, seed: int, 
         model: {(r.facility_code, r.antigen_code) for r in part.itertuples()}
         for model, part in selection.groupby("model")
     }
-    forecasts = bt.run_backtest(series, sorted(only), seed, cuts=tune + test, only=only)
-    frame = alerts.decide(ledger, forecasts, selection).merge(
-        alert_study.features(ledger, series, tune + test), on=["facility_code", "antigen_code", "origin_week"]
-    )
+    out.mkdir(parents=True, exist_ok=True)
+    cached = out / "weekly_forecasts.csv"
+    if cached.exists():
+        forecasts = pd.read_csv(cached)
+    else:
+        forecasts = bt.run_backtest(series, sorted(only), seed, cuts=tune + test, only=only)
+        # Saved before anything else runs: these fits take most of the time on Colab.
+        forecasts.to_csv(cached, index=False)
+    # The rule's own state columns are dropped so the study's features are the same in training and scoring.
+    decided = alerts.decide(ledger, forecasts, selection)[[*STUDY_KEY, "model", "alert", "warning"]]
+    frame = decided.merge(alert_study.features(ledger, series, tune + test), on=STUDY_KEY)
     is_test = frame["origin"].isin(test)
     tuning, scored = frame[~is_test], frame[is_test].copy()
     gate = alert_study.pick_late_rate_gate(tuning, tuning["alert"], tuning["warning"])

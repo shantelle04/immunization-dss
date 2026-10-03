@@ -7,13 +7,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from immdss_analytics.forecast import alert_study, alerts, guard
+from immdss_analytics.forecast import alert_study, alerts, commands, guard
 from immdss_analytics.forecast import backtest as bt
 from immdss_analytics.forecast.gru import upper_margin
 from immdss_analytics.forecast.guard import TrainingRefused
 from immdss_analytics.forecast.metrics import coverage, mae, mase, naive_scale, smape
 from immdss_analytics.forecast.models import fourier_terms, moving_average, seasonal_naive
-from immdss_analytics.forecast.series import SERIES_COLUMNS, build_weekly_series
+from immdss_analytics.forecast.series import SERIES_COLUMNS, build_weekly_series, write_series
 
 START, END = dt.date(2021, 1, 4), dt.date(2021, 2, 1)  # four Monday weeks
 
@@ -321,3 +321,68 @@ def test_risk_score_is_refused_off_colab(monkeypatch):
     monkeypatch.setattr(guard.importlib.util, "find_spec", lambda name: None)
     with pytest.raises(TrainingRefused):
         alert_study.fit_risk_score(pd.DataFrame(), pd.DataFrame(), 1)
+
+
+class _StandInModel:
+    """Scores by how little stock is left; stands in for the fitted model so nothing is trained here."""
+
+    def predict_proba(self, features):
+        risk = 1 / (1 + features["weeks_of_stock"].to_numpy())
+        return np.column_stack([1 - risk, risk])
+
+
+def test_alert_study_runs_end_to_end_with_a_stand_in_risk_model(tmp_path, monkeypatch):
+    weeks = pd.date_range("2023-01-02", periods=130, freq="W-MON")
+    rng = np.random.default_rng(5)
+    rows = [(str(weeks[0].date()), f, "BCG", "opening_balance", 30) for f in ("F1", "F2")]
+    for i, w in enumerate(weeks):
+        for fac, delivered in (("F1", 45), ("F2", 32)):
+            if i and i % 4 == 0:
+                rows.append((str(w.date()), fac, "BCG", "receipt", delivered))
+    ledger = pd.DataFrame(rows, columns=["date", "facility_code", "antigen_code", "kind", "quantity_doses"])
+    stock = {"F1": 30, "F2": 30}
+    issues = []
+    for i, w in enumerate(weeks):
+        for fac, delivered in (("F1", 45), ("F2", 32)):
+            stock[fac] += delivered if i and i % 4 == 0 else 0
+            used = min(stock[fac], int(rng.poisson(9)))
+            stock[fac] -= used
+            if used:
+                issues.append((str((w + pd.DateOffset(days=2)).date()), fac, "BCG", "issue", -used))
+    ledger = pd.concat([ledger, pd.DataFrame(issues, columns=ledger.columns)])
+    run = tmp_path / "run"
+    (run / "app").mkdir(parents=True)
+    (run / "truth").mkdir()
+    ledger.to_csv(run / "app" / "stock_transactions.csv", index=False)
+    (run / "manifest.json").write_text('{"run_id": "toy"}')
+    series = build_weekly_series(ledger, weeks[0].date(), (weeks[-1] + pd.DateOffset(weeks=1)).date())
+    truth = series.rename(columns={"stockout_flag": "stockout"})[
+        ["facility_code", "antigen_code", "week_start", "stockout"]
+    ]
+    truth.to_csv(run / "truth" / "weekly_stock.csv", index=False)
+    sha = write_series(series, tmp_path / "series" / "weekly_issues.csv")
+    (tmp_path / "series" / "series_manifest.json").write_text(f'{{"sha256": "{sha}"}}')
+    results = tmp_path / "results"
+    results.mkdir()
+    selection = series[["facility_code", "antigen_code"]].drop_duplicates().assign(model="b2")
+    selection.to_csv(results / "selection.csv", index=False)
+
+    seen = {}
+
+    def stand_in_fit(train, tune, seed):
+        seen["train"], seen["tune"] = train, tune
+        return _StandInModel(), 0.4, {"stand_in": True}
+
+    monkeypatch.setattr(alert_study, "on_training_host", lambda: True)
+    monkeypatch.setattr(alert_study, "fit_risk_score", stand_in_fit)
+    out = commands.run_alert_study(
+        run, tmp_path / "series" / "weekly_issues.csv", results, 1, tmp_path / "out"
+    )
+    table = pd.read_csv(out / "alert_study.csv").set_index("method")
+    assert {"rule, weekly decisions", "risk score", "risk score or rule"} <= set(table.index)
+    assert table.loc["risk score", "decisions"] == 2 * 21
+    for frame in seen.values():
+        assert set(alert_study.FEATURES) <= set(frame.columns), "training and scoring share every feature"
+    assert seen["train"]["origin"].max() + bt.HORIZON <= seen["tune"]["origin"].min(), "labels do not overlap"
+    decisions = pd.read_csv(out / "weekly_decisions.csv")
+    assert decisions["risk"].between(0, 1).all() and decisions["risk_flag"].isin([True, False]).all()

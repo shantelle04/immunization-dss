@@ -19,7 +19,8 @@ D-07 (proposed, for the supervisor): alert recall at least 0.95 at a 4-week hori
 | 7 | 2026-10-02 | Weekly decisions (D-43 stage 1): same rule, decided every week as the app does | baselines | 1.000; early 0.973; onset early 0.960 | 0.348 (base rate 0.278, lift 1.25) | 1,234 of 1,764 | **Recall target met** on the weekly definition, including with a full week of warning. Precision is only 1.25 times the base rate. Trained models: pending the next Colab run |
 | 8 | 2026-10-02 | Delivery-history gate (D-43 stage 2): raise the late-delivery warning only for series whose past deliveries were late | baselines | 1.000; early 1.000 | 0.289 (lift 1.04) | 1,677 of 1,764 | No gain: deliveries are rarely late by more than a week (late rate 0 for 73.8% of tuning decisions, never above 0.25), so the gate cannot separate series. Negative result |
 | 9 | 2026-10-02 | Fix of the ledger stock-out flag (T-03, D-44), found while testing stage 3 | - | - | - | - | The flag missed weeks that start and stay at zero stock. After the fix it marks 2,290 weeks, exactly the simulator's true stock-out weeks, without reading `truth/`. Training series hash changed |
-| 10 | pending | Risk score (D-43 stage 3): logistic regression on ledger features, threshold set on earlier weeks | Colab | pending | pending | pending | Needs the next Colab run |
+| 10 | 2026-10-03 | Retrain all models on the corrected series (Colab run `4858e7f`) | GRU 80, SARIMA 4 | 0.843 | 0.373 | 316 of 504 | Same alert result as before the fix; GRU MASE 0.671, coverage 0.804, MAE on weeks without a stock-out 3.65. The weekly study step crashed on a column clash in the risk-score code (the GRU and SARIMA weekly forecasts were computed, about 17 minutes, but not saved). Fixed, an end-to-end test with a stand-in model added, and weekly forecasts are now saved before the risk step |
+| 11 | pending | Weekly decisions with the trained models, and the risk score (D-43 stage 3) | Colab | pending | pending | pending | Needs one more Colab run |
 
 Rows 1 to 6 use the 4-weekly evaluation (504 decisions, 198 true stock-out weeks); rows 7 and 8 the weekly evaluation (1,764 decisions, 183 true stock-out weeks counted, 126 episode starts). The two are not directly comparable: see section 3.
 
@@ -65,6 +66,6 @@ The recall target is met on a definition that matches how the system runs, but t
 
 ## 6. Next
 
-1. Colab run at the new commit: main backtest on the corrected series, weekly forecasts for the selected models, the risk score. Record rows 7 and 10 for the trained models.
+1. Colab run at the new commit: weekly forecasts for the selected models and the risk score. Record row 11.
 2. If the risk score has a better lift at 0.95 recall than the rule, propose it for the application (author decides).
 3. Raise the precision question with the supervisor alongside D-07.
