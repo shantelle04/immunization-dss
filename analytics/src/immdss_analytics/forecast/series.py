@@ -24,8 +24,9 @@ def build_weekly_series(ledger: pd.DataFrame, start: dt.date, end: dt.date) -> p
 
     T-01: a week with no issues is 0, not missing.
     T-02: only weeks inside the stock window [start, end).
-    T-03: stockout_flag marks weeks in which the ledger balance reached zero or below on any day; issues in
-          those weeks understate demand (censored), which the evaluation reports separately.
+    T-03: stockout_flag marks weeks in which the end-of-day ledger balance was zero or below on any day,
+          including days without a transaction; issues in those weeks understate demand (censored), which
+          the evaluation reports separately.
     """
     tx = ledger.copy()
     tx["date"] = pd.to_datetime(tx["date"])
@@ -43,14 +44,21 @@ def build_weekly_series(ledger: pd.DataFrame, start: dt.date, end: dt.date) -> p
         .rename("issued")
     )
 
-    daily = tx.groupby(["facility_code", "antigen_code", "date"])["quantity_doses"].sum().sort_index()
-    balance = daily.groupby(level=[0, 1]).cumsum().rename("balance").reset_index()
-    balance = balance[(balance["date"] >= start_ts) & (balance["date"] < end_ts)]
-    balance["week_start"] = _monday(balance["date"])
-    out_weeks = balance.loc[
-        balance["balance"] <= 0, ["facility_code", "antigen_code", "week_start"]
-    ].drop_duplicates()
-    out_weeks["stockout_flag"] = True
+    # End-of-day balance for every day, carried forward over days without a transaction, so a week that
+    # starts and stays at zero is flagged as well as the week in which stock ran out.
+    days = pd.date_range(start_ts, end_ts - pd.DateOffset(days=1), freq="D")
+    moved = tx.groupby(["facility_code", "antigen_code", "date"])["quantity_doses"].sum()
+    flagged = []
+    for (fac, ant), g in moved.groupby(level=[0, 1]):
+        balance = g.droplevel([0, 1]).sort_index().cumsum()
+        opening = balance[balance.index < start_ts]
+        daily = balance.reindex(days).ffill().fillna(opening.iloc[-1] if len(opening) else 0)
+        empty = daily[daily <= 0].index
+        for week in (empty - pd.to_timedelta(empty.weekday, unit="D")).unique():
+            flagged.append((fac, ant, week, True))
+    out_weeks = pd.DataFrame(
+        flagged, columns=["facility_code", "antigen_code", "week_start", "stockout_flag"]
+    )
 
     grid = series_keys.merge(pd.DataFrame({"week_start": weeks}), how="cross")
     frame = grid.merge(issued.reset_index(), how="left", on=["facility_code", "antigen_code", "week_start"])

@@ -55,8 +55,19 @@ def _forecast_all(
     return {k: fn(g["issued"].to_numpy()[:cut], HORIZON) for k, g in grouped.items()}
 
 
-def run_backtest(series: pd.DataFrame, models: list[str], seed: int = 42, gru_params=None) -> pd.DataFrame:
-    """One row per model, series, origin and forecast week."""
+def run_backtest(
+    series: pd.DataFrame,
+    models: list[str],
+    seed: int = 42,
+    gru_params=None,
+    cuts: list[int] | None = None,
+    only: dict[str, set] | None = None,
+) -> pd.DataFrame:
+    """One row per model, series, origin and forecast week.
+
+    `cuts` replaces the default origins (for example weekly ones); `only` limits a model to the series that
+    selected it, so per-series models are not fitted where their forecast would not be used.
+    """
     unknown = set(models) - set(PER_SERIES) - {"gru"}
     if unknown:
         raise ValueError(f"unknown models: {sorted(unknown)}")
@@ -67,12 +78,16 @@ def run_backtest(series: pd.DataFrame, models: list[str], seed: int = 42, gru_pa
     rows = []
     for model in models:
         started = time.perf_counter()
-        for origin in origins(len(weeks)):
+        wanted = (only or {}).get(model)
+        fit_on = grouped if wanted is None or model == "gru" else {k: grouped[k] for k in wanted}
+        for origin in cuts if cuts is not None else origins(len(weeks)):
             test_weeks = weeks[origin : origin + HORIZON]
             assert weeks[:origin].max() < test_weeks.min(), (
                 "leakage: a test week is inside the training window"
             )
-            for key, fc in _forecast_all(model, grouped, origin, weeks, seed, gru_params).items():
+            for key, fc in _forecast_all(model, fit_on, origin, weeks, seed, gru_params).items():
+                if wanted is not None and key not in wanted:
+                    continue
                 g = grouped[key]
                 actual = g["issued"].to_numpy()[origin : origin + HORIZON]
                 flags = g["stockout_flag"].to_numpy()[origin : origin + HORIZON]

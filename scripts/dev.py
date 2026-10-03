@@ -399,6 +399,19 @@ def evaluate_models(args: argparse.Namespace) -> None:
             exit_on_error=False,
         ),
         run(tool("immdss"), "evaluate-alerts", run_dir, "--results", out, exit_on_error=False),
+        run(
+            tool("immdss"),
+            "alert-study",
+            run_dir,
+            "--series",
+            ROOT / "data" / "processed" / run_dir.name / "weekly_issues.csv",
+            "--results",
+            out,
+            "--out",
+            out / "alert_study",
+            heavy=True,
+            exit_on_error=False,
+        ),
     ]
     details: dict = {"results": str(out.relative_to(ROOT))}
     if all(r.code == 0 for r in steps):
@@ -413,6 +426,9 @@ def evaluate_models(args: argparse.Namespace) -> None:
             k: alerts[k] for k in ("alerts", "true_stockout_weeks", "recall", "precision", "f1", "buffer")
         }
         details["alert_sensitivity"] = alerts["sensitivity"]
+        study = json.loads((out / "alert_study" / "manifest.json").read_text())
+        keep = ("method", "flagged_share", "recall", "early_recall", "onset_early_recall", "lift")
+        details["alert_study_weekly"] = [{k: r[k] for k in keep} for r in study["results"]]
     record("evaluate", steps, details)
     if any(r.code for r in steps):
         sys.exit(1)

@@ -2,6 +2,19 @@
 
 Per phase: what was built, why, alternatives considered, weaknesses, and likely panel questions with answers.
 
+## Phase 4c: model comparison on Colab (2026-10-02)
+
+**Result.** GRU MASE 0.677, SARIMA 0.681, moving average 0.766, seasonal naive 0.950 (84 series, 24 test weeks). Both trained models beat seasonal naive on 96.4% of series. Full tables: `docs/evidence/M1_model_comparison_sim-seed42-368707d3.md`.
+
+**Why the GRU barely beats SARIMA.** 84 weekly series of 260 weeks are short for a neural network; one global model helps by sharing patterns across facilities, but the simulated demand is mostly smooth seasonality plus noise, which SARIMA with Fourier terms already captures. This matches the expectation in R-03.
+
+**The surprise, and what it turned out to be.** Better point forecasts gave worse alerts (recall 0.843 against 0.914). I first blamed the GRU's narrow interval and calibrated it twice (D-41): the forecasts improved (MASE 0.671, coverage 0.806) but recall did not move. Looking at the 28 missed cases showed why: in 24 of them a delivery was expected within the 4 weeks and came late or short. The rule assumes deliveries arrive on time, so no forecast can catch those; the baselines caught more of them only because they forecast slightly too high. I then tried the obvious rule fix (D-42): warn if a one-week-late delivery would empty the stock. It reached recall 1.0 by flagging 95.6% of cases, which is useless in practice, so it was measured and left out. The honest result is recall 0.843 at precision 0.630, and the lesson is that stock-outs here are mostly a supply problem that demand forecasting cannot see.
+
+**Likely questions**
+1. Is the GRU worth its complexity? (On this data, barely: 0.677 against 0.681. The selection rule keeps SARIMA available, and the result is reported, not hidden.)
+2. Why not choose the model with the best alerts? (The selection rule was fixed before the results (D-21), so choosing after seeing them would be tuning on the test set. D-41 is decided on the cause, interval calibration, not on the score.)
+3. How do you know Colab used the same data? (It rebuilt the dataset from the seed and every file hash matched; the training series hash equals the one the app rebuilds from its database.)
+
 ## Phase 4b: Prototype 2 (2026-10-02)
 
 **What was built.** Forecasts and stock-out alerts inside the system, outreach session plans and attendance, FHIR R4 export, administrator screens, and a mobile-first interface. Until the Colab models are imported, the app forecasts with the better of the two baselines per series (D-39).

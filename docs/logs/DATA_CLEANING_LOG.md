@@ -25,3 +25,9 @@ All data is synthetic (D-02). This log records every generator run used as evide
 
 | Date | Run ID | File | Defect | Planted | Caught | Recall | Clean rows wrongly rejected |
 |---|---|---|---|---|---|---|---|
+
+## Training series rule T-03 (2026-10-02, D-44)
+
+| Date | Rule | Defect | Before | After | Check |
+|---|---|---|---|---|---|
+| 2026-10-02 | T-03 stock-out flag | Weeks that started and stayed at zero stock were not flagged, because only days with a transaction were examined | 1,635 flagged weeks | 2,290 flagged weeks | Equal to the simulator's true stock-out weeks (2,290 of 2,290 overlap), computed from the ledger alone; test `test_stockout_flag_covers_weeks_that_start_and_stay_at_zero` |

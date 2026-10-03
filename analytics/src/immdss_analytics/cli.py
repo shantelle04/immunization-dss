@@ -11,7 +11,13 @@ from pathlib import Path
 import numpy as np
 
 from .eda import run_eda
-from .forecast.commands import build_series, evaluate_alerts, run_backtests, train_final
+from .forecast.commands import (
+    build_series,
+    evaluate_alerts,
+    run_alert_study,
+    run_backtests,
+    train_final,
+)
 from .forecast.guard import TrainingRefused
 from .sim.calibrate import calibrate, refine
 from .sim.config import ConfigError, load_config, parse_config
@@ -116,6 +122,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     p_alerts.add_argument("run_dir", type=Path)
     p_alerts.add_argument("--results", type=Path, required=True)
+    p_study = sub.add_parser(
+        "alert-study",
+        help="weekly alert decisions, delivery-history gate and risk score against ground truth",
+    )
+    p_study.add_argument("run_dir", type=Path)
+    p_study.add_argument("--series", type=Path, required=True)
+    p_study.add_argument("--results", type=Path, required=True, help="backtest folder with selection.csv")
+    p_study.add_argument("--seed", type=int, default=42)
+    p_study.add_argument("--out", type=Path, required=True)
     args = parser.parse_args(argv)
 
     try:
@@ -129,6 +144,9 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         if args.command == "backtest":
             run_backtests(args.run_dir, args.series, args.models.split(","), args.seed, args.out)
+            return 0
+        if args.command == "alert-study":
+            run_alert_study(args.run_dir, args.series, args.results, args.seed, args.out)
             return 0
         if args.command == "evaluate-alerts":
             evaluate_alerts(args.run_dir, args.results)

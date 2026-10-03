@@ -9,7 +9,7 @@
 | Candidates | B1 seasonal naive (same week last year, or last 4-week mean when history is short); B2 moving average of the last 4 weeks (proposal's comparison point); SARIMA (statsmodels; ARIMA orders (1,0,0), (0,1,1), (1,1,1), (2,0,1), each with and without 2 Fourier harmonics of the 52.18-week year for seasonality (D-36), chosen by AIC on the training window); GRU (Keras, one global model across all 84 series, lookback 26 weeks, inputs: scaled series, ledger stock-out flag, week-of-year sine and cosine, one-hot facility and antigen) |
 | Selection per series | GRU when the series has at least 104 weeks and beats B1 on its backtest; else SARIMA; if history is under 26 weeks, a population-based estimate (catchment births x schedule x coverage). Proposal says "ARIMA fallback for facilities with no history"; ARIMA cannot fit without history, so this is logged as D-21 |
 | Validation | Rolling-origin backtest: 6 origins of 4 weeks covering the last 24 weeks (D-35), every model refit at each origin on the weeks before it only; scalers fit on training windows only; GRU early stopping uses the last 15% of the training weeks as a time-based hold-out |
-| Intervals | 80% intervals: SARIMA native intervals; GRU from the quantile (pinball) loss at 0.1, 0.5 and 0.9; baselines from the 10th and 90th percentiles of in-sample residuals |
+| Intervals | 80% intervals: SARIMA native intervals; GRU from the quantile (pinball) loss at 0.1, 0.5 and 0.9, with its upper end calibrated by a one-sided conformal margin on a block of training weeks used neither for fitting nor for early stopping, so that it is exceeded about 10% of the time (D-41, option D); baselines from the 10th and 90th percentiles of in-sample residuals |
 
 **Metrics**
 
@@ -30,7 +30,9 @@ Projected stock at week t+k = current ledger balance - cumulative (80% upper bou
 | Alert precision | Alerts followed by a true stock-out or true below-minimum week within 4 weeks / all alerts |
 | F1 | Harmonic mean |
 | Lead time | Weeks between alert and the event |
-| Evaluation design | One alert decision per series at each of the 6 backtest origins (504 decisions), from ledger data before the origin and that origin's forecast; scored against the 4 weeks after the origin. Precision counts a true stock-out or a true below-minimum week; strict precision counts stock-outs only |
+| Weekly evaluation (D-43) | One decision per series every week over the last 24 weeks (21 decision weeks with a full 4-week horizon, 1,764 decisions), with forecasts made at that week. Recall: true stock-out weeks with a flagged decision in that week or the 3 before / all true stock-out weeks (the first decision week is not counted). Early recall: the flagged decision is at least one week before. Onset early recall: early recall over the first week of each stock-out episode. Strict precision: flagged decisions followed by a true stock-out week within 4 weeks / flagged decisions. Base rate: decisions followed by a true stock-out / all decisions. Lift: strict precision / base rate. Code: `forecast/alert_study.py` |
+| Tuning without truth | Any threshold (delivery-history gate, risk-score cut) is set on the 24 weeks before the test weeks, using the ledger's own stock-out flag (T-03) as the label; `truth/` scores the test weeks only |
+| 4-weekly evaluation | One alert decision per series at each of the 6 backtest origins (504 decisions), from ledger data before the origin and that origin's forecast; scored against the 4 weeks after the origin. Precision counts a true stock-out or a true below-minimum week; strict precision counts stock-outs only |
 
 ## 3. Defaulter classification and priority (M2)
 
@@ -65,27 +67,32 @@ Data-cleaning metric: import validation scored against `imports/import_dirty_tru
 
 ## 6. Results so far (evidence run `sim-seed42-368707d3`)
 
-Every number below is from a logged run: results ledger entries `evaluate` and `walkthrough` at commit `855d49a`, files in `data/results/sim-seed42-368707d3-baselines/`, training series SHA-256 `279617cf49ee...`. SARIMA and the GRU have not been run yet (Colab, D-14).
+Every number below is from a logged run. Baselines: results ledger entries `evaluate` and `walkthrough` at commit `855d49a`, files in `data/results/sim-seed42-368707d3-baselines/`. All four models: Colab run at commit `ff1ff0b` (Tesla T4), full tables in `docs/evidence/M1_model_comparison_sim-seed42-368707d3.md`. Training series SHA-256 `279617cf49ee...` in both.
 
-**Forecast backtest, baselines (84 series, 6 origins, last 24 weeks)**
+**Forecast backtest, all models (84 series, 6 origins, last 24 weeks; Colab `ff1ff0b`)**
 
 | Model | Mean MASE | Median MASE | Series beating seasonal naive | Mean MAE (doses/week) | Mean sMAPE | 80% interval coverage |
 |---|---|---|---|---|---|---|
+| GRU (global), upper end calibrated (D-41 option D, commit `25f6f70`) | 0.671 | 0.629 | 96.4% | 4.07 | 0.337 | 0.806 |
+| SARIMA (Fourier, D-36) | 0.681 | 0.640 | 96.4% | 4.17 | 0.338 | 0.844 |
 | B2 moving average (4 weeks) | 0.766 | 0.724 | 90.5% | 4.69 | 0.375 | 0.812 |
 | B1 seasonal naive | 0.950 | 0.934 | 64.3% | 5.86 | 0.493 | 0.842 |
 
-Bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/week in normal weeks and -0.39 in stock-out weeks; B1 -1.10 and -2.25. Selection (D-21 fallback, no SARIMA or GRU yet): B2 for 64 series, B1 for 20.
+The GRU and SARIMA are close: the GRU has the lower MASE overall and for PCV, PENTA and IPV, SARIMA for BCG, MR, OPV and ROTA, and the GRU beats SARIMA on 54 of 84 series (42 before calibration). Before calibration the GRU's interval was too narrow (coverage 0.786). Bias against true demand: GRU -0.86 doses/week in normal weeks and -1.24 in stock-out weeks; SARIMA -0.95 and -1.33. Selection by D-21: GRU for 80 series, SARIMA for 4. Run time on Colab: SARIMA 849 s, GRU 158 s for 6 fits each.
 
-**Stock-out alerts with the selected baseline (D-38, buffer 0.25)**
+Baseline bias against true demand (`truth/`, evaluation only): B2 -0.40 doses/week in normal weeks and -0.39 in stock-out weeks; B1 -1.10 and -2.25.
 
-| Measure | Value | D-07 target |
-|---|---|---|
-| Recall (true stock-out weeks alerted within 4 weeks) | 0.914 (181 of 198) | at least 0.95: **not met** |
-| Precision (stock-out or below minimum) | 0.586 | reported |
-| Strict precision (stock-out only) | 0.359 | reported |
-| F1 | 0.714 | reported |
-| Mean lead time | 2.15 weeks | reported |
+**Stock-out alerts (D-38, buffer 0.25, 504 decisions, 198 true stock-out weeks)**
 
-Sensitivity to the buffer (not a tuned result; the reported value uses D-33): 0.0 gives recall 0.914, precision 0.483; 0.5 gives recall 0.919, precision 0.729. Recall per vaccine ranges from 0.818 (OPV) to 0.978 (MR). The Colab models may change these figures; both will be reported.
+| Forecasts used by the rule | Recall | Precision | Strict precision | F1 | Mean lead time | D-07 recall target 0.95 |
+|---|---|---|---|---|---|---|
+| D-21 selection (GRU 80, SARIMA 4), current model `25f6f70` | 0.843 (167) | 0.630 | 0.373 | 0.721 | 2.04 weeks | **not met** |
+| Baseline selection (B2 64, B1 20) | 0.914 (181) | 0.586 | 0.359 | 0.714 | 2.15 weeks | **not met** |
+
+The more accurate forecasts give fewer alerts and lower recall, because the rule uses the upper bound of the 80% interval and the GRU's interval is narrower (coverage 0.786). With the D-21 selection, recall per vaccine ranges from 0.636 (OPV) to 0.909 (IPV); a buffer of 0.5 gives recall 0.899 and precision 0.778 (sensitivity only; the reported value uses D-33). Two calibrations of the GRU interval were tried (D-41). Option C (two-sided, on the early-stopping weeks, commit `03d112c`) changed nothing. Option D (upper end only, on a separate calibration block, commit `25f6f70`, the current model) gave GRU MASE 0.671, coverage 0.806 and upper-bound exceedance 11.0% (target 10%), but alert recall stayed at 0.843 (precision 0.630). The misses are not a forecasting problem: in 24 of the 28 missed stock-out origins the stock-out came after a delivery that was expected within the 4 weeks and arrived late or short, which the rule assumes cannot happen (D-42).
+
+**Late-delivery check (D-42, evaluated, not used in the app).** Adding a warning when stock would run out if the expected delivery came one week late raises recall to 1.0, but only by flagging 95.6% of all decisions (482 of 504); precision falls to 0.473 (strict 0.303). With two weeks, 98.8% are flagged. D-07 requires precision beside recall precisely so that the target cannot be met by alerting everything, so the reported result remains recall 0.843 and precision 0.630, and the 0.95 target is **not met**. True stock-outs occur at 146 of the 504 decisions (29%).
+
+**Weekly evaluation (D-43), baselines, commit of the results ledger entry `evaluate` on 2026-10-02.** Deciding every week, as the application does, the same rule reaches recall 1.000, early recall 0.973 and onset early recall 0.960, so the 0.95 target is met on this definition, at strict precision 0.348 against a base rate of 0.278 (lift 1.25) with 70.0% of decisions flagged. A delivery-history gate on the late-delivery warning gave no gain (lift 1.04). The full sequence of attempts is in doc 15; results for the trained models and the risk score are pending the next Colab run. After the T-03 fix (D-44) the training series hash is `9e4e6a4edda1...`; all models were retrained on the corrected series (Colab `4858e7f`): GRU MASE 0.671, coverage 0.804, SARIMA and baselines unchanged, alert recall 0.843 and precision 0.630 as before. Weekly results for the trained models and the risk score: pending (doc 15, row 11).
 
 **Defaulter categorisation (oracle, doc 05 section 3)**: 10,390 children under 2 across 12 facilities; defaulter status and overdue dose list match the independent oracle for 10,390 of 10,390 (100%); rank order matches for 12 of 12 facilities.
