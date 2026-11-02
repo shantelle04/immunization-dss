@@ -566,6 +566,178 @@ def bootstrap(args: argparse.Namespace) -> None:
     test(args)
 
 
+@dataclass
+class Check:
+    name: str
+    ok: bool
+    detail: str
+    fix: str = ""
+
+
+def tool_checks() -> list[Check]:
+    """Tools and files a machine needs before anything else can work."""
+    checks = [
+        Check(
+            "Python 3.12 or later",
+            sys.version_info >= (3, 12),
+            platform_version(),
+            "install Python 3.12+",
+        ),
+        Check("Virtual environment", PY.exists(), str(VENV.name), "python scripts/dev.py setup"),
+        Check(
+            "Node.js and npm",
+            bool(shutil.which("npm")),
+            shutil.which("npm") or "not found",
+            "install Node.js 20 or 22",
+        ),
+        Check(
+            "Docker",
+            bool(shutil.which("docker")),
+            shutil.which("docker") or "not found",
+            "install Docker Desktop",
+        ),
+        Check(
+            ".env file present (contents not read)",
+            (ROOT / ".env").exists(),
+            ".env",
+            "python scripts/dev.py env",
+        ),
+        Check(
+            "Frontend packages",
+            (ROOT / "frontend" / "node_modules").is_dir(),
+            "frontend/node_modules",
+            "python scripts/dev.py setup",
+        ),
+    ]
+    hooks = subprocess.run(
+        ["git", "config", "--local", "core.hooksPath"], cwd=ROOT, capture_output=True, text=True
+    )
+    checks.append(
+        Check(
+            "Commit hooks active",
+            hooks.stdout.strip() == "scripts/hooks",
+            hooks.stdout.strip() or "not set",
+            "python scripts/dev.py setup",
+        )
+    )
+    return checks
+
+
+def platform_version() -> str:
+    return ".".join(map(str, sys.version_info[:3]))
+
+
+def data_checks(run_dir: Path, reference: dict) -> list[Check]:
+    """The evidence run exists, passed validation, and is byte-identical to the reference hashes."""
+    manifest_file = run_dir / "manifest.json"
+    if not manifest_file.exists():
+        return [
+            Check(
+                "Synthetic data generated", False, f"{run_dir.name} missing", "python scripts/dev.py simulate"
+            )
+        ]
+    manifest = json.loads(manifest_file.read_text())
+    report = run_dir / "validation_report.json"
+    passed = report.exists() and json.loads(report.read_text()).get("passed") is True
+    different = [
+        f for f, sha in reference["files"].items() if manifest["files"].get(f, {}).get("sha256") != sha
+    ]
+    return [
+        Check("Synthetic data generated", True, run_dir.name),
+        Check(
+            "Data passed the 11 checks", passed, "validation_report.json", "python scripts/dev.py validate"
+        ),
+        Check(
+            "Data identical to the evidence run",
+            not different,
+            f"{len(reference['files']) - len(different)} of {len(reference['files'])} files match",
+            "python scripts/dev.py simulate --force (and log it as a new run if it still differs)",
+        ),
+    ]
+
+
+def database_checks(status: dict | None) -> list[Check]:
+    """What the application database holds, from `manage.py system_status`."""
+    if status is None:
+        return [Check("Database reachable", False, "no connection", "python scripts/dev.py db-up")]
+    checks = [
+        Check("Database reachable", True, "PostgreSQL"),
+        Check(
+            "Migrations applied",
+            status["pending_migrations"] == 0,
+            f"{status['pending_migrations']} pending",
+            "cd backend && python manage.py migrate",
+        ),
+    ]
+    if status["pending_migrations"]:
+        return checks
+    roles = status["users_by_role"]
+    forecast = status["forecast_source"]
+    checks += [
+        Check(
+            "Data loaded into the database",
+            status["facilities"] > 0 and status["children"] > 0,
+            f"{status['facilities']} facilities, {status['children']:,} children",
+            "python scripts/dev.py load",
+        ),
+        Check(
+            "Forecasts stored",
+            forecast is not None,
+            f"{forecast} for {status['forecast_as_of']}" if forecast else "none",
+            "python scripts/dev.py forecasts   (trained models: --results <unzipped Colab folder>/backtest)",
+        ),
+        Check(
+            "Trained models imported (not only baselines)",
+            forecast == "colab",
+            forecast or "none",
+            "python scripts/dev.py forecasts --results <unzipped Colab folder>/backtest",
+        ),
+        Check(
+            "Accounts for all three roles",
+            all(roles.get(r) for r in ("system_admin", "facility_manager", "healthcare_worker")),
+            ", ".join(f"{n} {r}" for r, n in sorted(roles.items())) or "none",
+            "python scripts/dev.py demo-users",
+        ),
+        Check(
+            "Clinical date is the dataset's as-of date",
+            status["clinical_today"] == (status["forecast_as_of"] or status["clinical_today"]),
+            status["clinical_today"],
+            "set IMMDSS_TODAY in .env to the run's as-of date (2025-12-29), or start with dev.py run",
+        ),
+    ]
+    return checks
+
+
+def doctor(args: argparse.Namespace) -> None:
+    """Check a machine end to end and print the command that fixes each failed check."""
+    checks = tool_checks()
+    reference = json.loads((ROOT / "analytics" / "configs" / "evidence_hashes.json").read_text())
+    checks += data_checks(ROOT / args.run, reference)
+    status = None
+    if PY.exists() and (ROOT / ".env").exists():
+        result = run(
+            PY,
+            "manage.py",
+            "system_status",
+            cwd=ROOT / "backend",
+            exit_on_error=False,
+            extra_env=_clinical_env(),
+        )
+        if result.code == 0:
+            status = json.loads(result.output.strip().splitlines()[-1])
+    checks += database_checks(status)
+    width = max(len(c.name) for c in checks)
+    for c in checks:
+        print(f"{'PASS' if c.ok else 'FAIL'}  {c.name:<{width}}  {c.detail}")
+        if not c.ok:
+            print(f"      fix: {c.fix}")
+    failed = [c.name for c in checks if not c.ok]
+    record("doctor", [Result(1 if failed else 0, "", 0.0)], {"failed": failed, "checks": len(checks)})
+    print(f"\n{len(checks) - len(failed)} of {len(checks)} checks pass")
+    if failed:
+        sys.exit(1)
+
+
 def history(_: argparse.Namespace) -> None:
     if not LEDGER.exists():
         sys.exit(f"history: {LEDGER.relative_to(ROOT)} does not exist yet")
@@ -624,6 +796,9 @@ def main() -> None:
     p_users = sub.add_parser("demo-users", help="create demo accounts; passwords go to .demo_credentials.txt")
     p_users.add_argument("--reset", action="store_true", help="give existing demo users new passwords")
     p_users.set_defaults(func=demo_users)
+    p_doc = sub.add_parser("doctor", help="check a machine end to end and print how to fix each failure")
+    p_doc.add_argument("run", nargs="?", default=DEFAULT_RUN)
+    p_doc.set_defaults(func=doctor)
     p_e2e = sub.add_parser("e2e", help="browser tests on a separate database (needs Chrome and the db)")
     p_e2e.add_argument("run", nargs="?", default=DEFAULT_RUN)
     p_e2e.add_argument("--screenshots", action="store_true", help="save F-UI-*.png to docs/evidence")

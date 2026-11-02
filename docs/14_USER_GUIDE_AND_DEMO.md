@@ -18,6 +18,28 @@ On Windows use `py scripts\dev.py <command>`. The clinical date is pinned to the
 
 **Offline (D-37).** If the connection drops, a banner appears, data already on screen stays readable, and every save button is disabled until the connection returns. No clinical data is stored on the device.
 
+## 1a. Running on another machine (checklist)
+
+Generated data, the database, Colab results and demo passwords are never in git, so a fresh clone has none of them. The Stock > Forecast tab then says no forecast is stored: that is expected until step 7 below is done.
+
+Run `python3 scripts/dev.py doctor` (Windows: `py scripts\dev.py doctor`) at any point. It checks everything below and prints the command that fixes each failed check; the result goes into the results ledger.
+
+| # | Step | Command (Windows: `py scripts\dev.py ...`) | What `doctor` checks |
+|---|---|---|---|
+| 1 | Install Python 3.12+, Node.js 20 or 22, Docker Desktop, Git | (installers) | Python version, npm and Docker found |
+| 2 | Clone the repository and install packages | `git clone ...`, then `python3 scripts/dev.py setup` | Virtual environment, frontend packages, commit hooks |
+| 3 | Create `.env` with generated secrets | `python3 scripts/dev.py env` | `.env` exists (its contents are never read or shown) |
+| 4 | Start the database | `python3 scripts/dev.py db-up` | Database reachable, migrations applied |
+| 5 | Generate the synthetic data (about 2 to 3 minutes) | `python3 scripts/dev.py simulate` | Data generated, passed the 11 checks, byte-identical to the evidence run |
+| 6 | Load it and create accounts | `python3 scripts/dev.py load`, then `python3 scripts/dev.py demo-users` | Data loaded, accounts for all three roles |
+| 7 | Store forecasts | Trained models: copy the Colab results zip to the machine, unzip it, then `python3 scripts/dev.py forecasts --results <unzipped folder>/backtest`. Without the zip: `python3 scripts/dev.py forecasts` (baselines) | Forecasts stored; trained models imported |
+| 8 | Start the app | `python3 scripts/dev.py run`, open http://localhost:5173 | Clinical date is the dataset's as-of date |
+| 9 | Confirm it works | `python3 scripts/dev.py test`, `python3 scripts/dev.py walkthrough` | 343 tests pass; walkthrough accuracy 100% |
+
+**Why step 7 can be refused.** The import compares the training data fingerprint inside the Colab results with the series rebuilt from this machine's database. It refuses the import if they differ, for example when the data was generated with different code. `doctor`'s "Data identical to the evidence run" check catches that before you try. The final results are from Colab run `625841d`; any zip from that run, or a new Colab run, works.
+
+**Accounts.** `demo-users` writes new random passwords for that machine to `.demo_credentials.txt`; passwords from another machine do not carry over. The administrator password is `DJANGO_INITIAL_ADMIN_PASSWORD` in that machine's `.env`.
+
 ## 2. Screens by role
 
 ### Health worker

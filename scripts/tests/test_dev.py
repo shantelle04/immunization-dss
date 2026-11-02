@@ -68,3 +68,52 @@ def test_record_appends_one_json_line(tmp_path):
     assert entries[0]["outcome"] == "FAIL" and entries[0]["seconds"] == 1.7
     assert entries[1]["outcome"] == "PASS"
     assert set(entries[0]) >= {"at", "git_commit", "peak_child_rss_mb", "details"}
+
+
+STATUS = {
+    "pending_migrations": 0,
+    "facilities": 12,
+    "children": 35525,
+    "stock_transactions": 84941,
+    "forecast_source": "colab",
+    "forecast_as_of": "2025-12-29",
+    "alerts_active": 67,
+    "users_by_role": {"system_admin": 1, "facility_manager": 12, "healthcare_worker": 12},
+    "clinical_today": "2025-12-29",
+}
+
+
+def failed(checks):
+    return [c.name for c in checks if not c.ok]
+
+
+def test_doctor_passes_a_ready_database_and_names_each_missing_step():
+    assert failed(dev.database_checks(STATUS)) == []
+    fresh = STATUS | {"forecast_source": None, "forecast_as_of": None, "users_by_role": {}}
+    names = failed(dev.database_checks(fresh))
+    assert names == [
+        "Forecasts stored",
+        "Trained models imported (not only baselines)",
+        "Accounts for all three roles",
+    ]
+    fixes = {c.name: c.fix for c in dev.database_checks(fresh) if not c.ok}
+    assert fixes["Forecasts stored"].startswith("python scripts/dev.py forecasts")
+    baselines = failed(dev.database_checks(STATUS | {"forecast_source": "baselines"}))
+    assert baselines == ["Trained models imported (not only baselines)"]
+    assert failed(dev.database_checks(None)) == ["Database reachable"]
+    assert failed(dev.database_checks({"pending_migrations": 3})) == ["Migrations applied"]
+    real_date = failed(dev.database_checks(STATUS | {"clinical_today": "2026-11-02"}))
+    assert real_date == ["Clinical date is the dataset's as-of date"]
+
+
+def test_doctor_checks_the_generated_data_against_the_reference_hashes(tmp_path):
+    reference = {"files": {"app/a.csv": "1" * 64, "app/b.csv": "2" * 64}}
+    assert failed(dev.data_checks(tmp_path / "missing", reference)) == ["Synthetic data generated"]
+    run = tmp_path / "run"
+    run.mkdir()
+    files = {"app/a.csv": {"sha256": "1" * 64}, "app/b.csv": {"sha256": "9" * 64}}
+    (run / "manifest.json").write_text(json.dumps({"files": files}))
+    (run / "validation_report.json").write_text(json.dumps({"passed": True}))
+    checks = dev.data_checks(run, reference)
+    assert failed(checks) == ["Data identical to the evidence run"]
+    assert "1 of 2 files match" in [c.detail for c in checks if not c.ok][0]
