@@ -20,6 +20,8 @@ On Windows use `py scripts\dev.py <command>`. The clinical date is pinned to the
 
 ## 1a. Running on another machine (checklist)
 
+A fuller version written for someone else installing the system, including training on Colab and common problems, is doc 17.
+
 Generated data, the database, Colab results and demo passwords are never in git, so a fresh clone has none of them. The Stock > Forecast tab then says no forecast is stored: that is expected until step 7 below is done.
 
 Run `python3 scripts/dev.py doctor` (Windows: `py scripts\dev.py doctor`) at any point. It checks everything below and prints the command that fixes each failed check; the result goes into the results ledger.
