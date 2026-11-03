@@ -521,6 +521,15 @@ def e2e(args: argparse.Namespace) -> None:
         sys.exit(result.code)
 
 
+def import_samples(args: argparse.Namespace) -> None:
+    """Demo upload files for one facility: new valid rows plus planted errors (never committed)."""
+    out = ROOT / "data" / "samples"
+    cmd = [PY, "manage.py", "import_samples", args.facility, "--out", out]
+    result = run(*cmd, cwd=ROOT / "backend", exit_on_error=False, extra_env=_clinical_env())
+    if result.code:
+        sys.exit(result.code)
+
+
 def run_app(_: argparse.Namespace) -> None:
     """Backend on 127.0.0.1:8000 and the frontend on http://localhost:5173 (API proxied); Ctrl+C stops."""
     env = {**os.environ, **_clinical_env()}
@@ -796,6 +805,11 @@ def main() -> None:
     p_users = sub.add_parser("demo-users", help="create demo accounts; passwords go to .demo_credentials.txt")
     p_users.add_argument("--reset", action="store_true", help="give existing demo users new passwords")
     p_users.set_defaults(func=demo_users)
+    p_samples = sub.add_parser(
+        "import-samples", help="demo upload CSVs for one facility: valid new rows plus known errors"
+    )
+    p_samples.add_argument("facility", help="facility code, for example SYN-S01")
+    p_samples.set_defaults(func=import_samples)
     p_doc = sub.add_parser("doctor", help="check a machine end to end and print how to fix each failure")
     p_doc.add_argument("run", nargs="?", default=DEFAULT_RUN)
     p_doc.set_defaults(func=doctor)

@@ -103,7 +103,19 @@ Everything the health worker has, plus: acknowledge an alert (Stock > Stock), ch
 
 A row refused at this stage is reported as REFUSED with the reason. Each upload, dry run or real, is kept as an import batch with its row errors and appears in the Audit log.
 
-**How it was measured.** The generator produces two files with deliberately broken rows and an answer key (`imports/` in the dataset). The checks caught 119 of 120 planted errors and rejected 0 of 697 clean rows. The one miss is a day-month swap that still gives a valid date. Those files mix several facilities, so when you upload them as one manager, rows for other facilities are correctly rejected as "own facility only". For a demonstration, use rows for that manager's own facility.
+**Templates.** The screen shows the required columns for the chosen kind and a **Download a template** link: a CSV with the exact header and one example row filled in with the signed-in manager's facility code, to overwrite with real rows.
+
+**Demo files.** `python3 scripts/dev.py import-samples <facility code>` (for example `SYN-S01`) writes three files to `data/samples/` (never committed):
+
+| File | Contents |
+|---|---|
+| `<facility>_immunizations.csv` | 20 valid new rows (doses due or overdue today for that facility's children, so not yet recorded) and 9 planted errors, one per rule: missing child ID, wrong date format, unknown dose, another facility, future date, date before birth, unknown child, wrong date of birth, duplicate |
+| `<facility>_stock.csv` | 8 valid receipts and 7 planted errors: unknown vaccine, unknown kind, quantity not a number, negative receipt, future date, wrong date format, another facility |
+| `<facility>_answer_key.csv` | Which row carries which planted error |
+
+Sign in as that facility's manager (for `SYN-S01`, `fm-syn-s01`), choose Import data, upload each file with **Check file**: exactly the planted rows are rejected (9 and 7) and every valid row passes. Importing the immunization file for real then records the 20 doses, takes them from stock, and those children drop off the defaulter list. Only run it for real on demo data, since it changes the database.
+
+**How it was measured.** Separately, the generator produces two files with deliberately broken rows and an answer key (`imports/` in the dataset), used by the walkthrough. The checks caught 119 of 120 planted errors and rejected 0 of 697 clean rows. The one miss is a day-month swap that still gives a valid date. Those files are cut from records that are already loaded and mix several facilities, so they are not suitable for uploading on screen; use the demo files above instead.
 
 ## 3. How a stock-out alert is decided (D-38)
 

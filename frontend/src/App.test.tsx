@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { AppRoutes, Providers, ROUTER_FUTURE } from "./App";
 import { api, setAccessToken } from "./api";
 import { chartPoints } from "./pages/ForecastChart";
+import { templateCsv } from "./pages/FacilityPages";
 
 type Handler = (init: RequestInit) => { status: number; body?: unknown };
 let routes: Record<string, Handler>;
@@ -303,4 +304,13 @@ test("going offline shows a notice and blocks saving, keeping the loaded data on
   expect(save).toBeDisabled();
   expect(screen.getByText("Record a stock transaction")).toBeInTheDocument();
   jest.restoreAllMocks();
+});
+
+test("import templates start with the exact columns the server expects and use the manager's facility", () => {
+  const [header, example] = templateCsv("immunizations", "SYN-D01").trim().split("\n");
+  expect(header).toBe("child_system_id,date_of_birth,dose_code,given_on,facility_code,lot_number");
+  expect(example.split(",")[4]).toBe("SYN-D01");
+  expect(templateCsv("stock", "SYN-D01").split("\n")[0]).toBe(
+    "date,facility_code,antigen_code,lot_number,kind,quantity_doses",
+  );
 });

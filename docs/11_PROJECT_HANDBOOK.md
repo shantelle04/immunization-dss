@@ -170,6 +170,7 @@ One command runner for Linux, macOS and Windows (standard library only). Result-
 | `walkthrough [run] [--prototype N]` | prototype evaluation: latency, accuracy against truth and the defaulter oracle, import cleaning | yes |
 | `forecasts [--results DIR]` | store 4-week forecasts and refresh alerts: baselines, or import a Colab results folder | yes |
 | `evaluate [run]` | baseline backtest and alert precision and recall against truth (fits nothing) | yes |
+| `import-samples <facility>` | demo upload files for one facility: valid new rows plus one planted error per rule, with an answer key, in `data/samples/` | |
 | `doctor [run]` | check a machine end to end (tools, data, database, forecasts, accounts, clinical date) and print the fix for each failure | yes |
 | `e2e [run] [--screenshots]` | Playwright browser tests (desktop and phone) on a separate database; screenshots to `docs/evidence/` | yes |
 | `run` | start the backend (127.0.0.1:8000) and frontend (http://localhost:5173); Ctrl+C stops both | |
