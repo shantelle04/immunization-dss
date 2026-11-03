@@ -48,6 +48,20 @@ Optional checks: `python3 scripts/dev.py test` runs all automated tests (343 sho
 
 The clinical date is fixed at 29 December 2025, the last day of the dataset, so overdue doses and alerts look as they would on that day.
 
+## 3a. Getting updates later
+
+The latest reviewed version is on the `main` branch; work in progress is on `phase/4-models`.
+
+| Situation | Run |
+|---|---|
+| First time (clone) | `git clone git@github.com:shantelle04/immunization-dss.git`, then `cd immunization-dss` |
+| Already cloned, get the latest | `git checkout main`, then `git pull` |
+| After pulling | `python3 scripts/dev.py setup` (installs any new library versions), then `python3 scripts/dev.py doctor` |
+| If `doctor` reports pending migrations | `cd backend`, then `python manage.py migrate` (run it yourself; it is never forced) |
+| If the data or training series changed | `python3 scripts/dev.py simulate`, `python3 scripts/dev.py load --replace`, `python3 scripts/dev.py forecasts` (or with `--results`) |
+
+`git pull` never touches `.env`, the generated data, the database or `.demo_credentials.txt`, because they are not in the repository.
+
 ## 4. Training the models on Google Colab and bringing them in
 
 Model training never runs on a personal computer; it runs on Colab with a free GPU. There are two ways to get trained forecasts.
@@ -56,7 +70,7 @@ Model training never runs on a personal computer; it runs on Colab with a free G
 
 **B. Train them yourself (about 40 minutes).**
 
-1. Open the notebook in Colab: `https://colab.research.google.com/github/shantelle04/immunization-dss/blob/phase/4-models/notebooks/immdss_colab_pipeline.ipynb`
+1. Open the notebook in Colab: `https://colab.research.google.com/github/shantelle04/immunization-dss/blob/main/notebooks/immdss_colab_pipeline.ipynb` (or `phase/4-models` in place of `main` for work in progress). In its first cell, set `REF` to the same branch
 2. Runtime > Change runtime type > **T4 GPU** > Save.
 3. Runtime > **Run all**. Do not use "Save a copy in GitHub" afterwards.
 4. When it finishes, the browser downloads `results_<run>_<commit>.zip`. Copy it to the computer running the system, unzip it, and run step 7 with `--results <unzipped folder>/backtest`.
