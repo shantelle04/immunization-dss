@@ -1,6 +1,6 @@
 # 11. Project handbook
 
-The single reference for how the Immunization Decision Support System works: status, setup, Docker, data generation, every script and command, roles and what each can access, and how everything is checked. Detailed stage-by-stage data and training plan: doc 12. Data generation, storage and role access in one place: doc 13. Screens, demo script and running the system: doc 14. Alert improvement log: doc 15. Decisions: doc 07. Rules: doc 10.
+The single reference for how the Immunization Decision Support System works: status, setup, Docker, data generation, every script and command, roles and what each can access, and how everything is checked. Detailed stage-by-stage data and training plan: doc 12. Data generation, storage and role access in one place: doc 13. Screens, demo script and running the system: doc 14. Alert improvement log: doc 15. Results and improvements of every stage: doc 16. Setup guide for a new computer, including Colab: doc 17. Decisions: doc 07. Rules: doc 10.
 
 Status as of 29 September 2026. Evidence run: `sim-seed42-368707d3`.
 
@@ -26,7 +26,7 @@ All data is synthetic (D-02): simulated data is used because no facility-level d
 | 1 | Synthetic data and EDA | Done | doc 04, `evidence/EDA_sim-seed42-368707d3.md`, `logs/DATA_CLEANING_LOG.md` |
 | 2 | Requirements and design | Drafted, supervisor review pending | doc 02, `diagrams/`, `wireframes/` |
 | 3 | Prototype 1 | Built and tested; gate review, screenshots, merge and `p1` tag pending | branch `phase/3-prototype-1`, `evidence/P1_walkthrough_*.md` |
-| 4 | Models and Prototype 2 | Prototype 2 built and tested: forecasts and stock-out alerts in the app (baselines until the Colab models are imported), session plans and attendance, FHIR export, admin screens, mobile-first UI, browser tests. **SARIMA and GRU not yet trained** (Colab only, D-14); alert recall 0.914 against the 0.95 target | branch `phase/4-models`, doc 05 section 6, doc 14, `evidence/P2_walkthrough_*.md`, `evidence/F-UI-*.png` |
+| 4 | Models and Prototype 2 | Built and evaluated: GRU MASE 0.671, SARIMA 0.681 (trained on Colab); alerts 99.5% of stock-out weeks (weekly checks), precision low; defaulter list 100% against the oracle; Prototype 2 with mobile-first UI and browser tests. Pending: D-45, gate review, `p2` tag | doc 05 section 6, doc 15, doc 16, `evidence/M1_*`, `evidence/P2_walkthrough_*`, `evidence/F-UI-*.png` |
 | 5 to 8 | Refinement and testing, user acceptance testing, documentation, demonstration | Not started | doc 01 |
 
 "Calibration" in Phase 1 adjusted the data generator until it matched published coverage figures. It is not model training.
@@ -170,6 +170,8 @@ One command runner for Linux, macOS and Windows (standard library only). Result-
 | `walkthrough [run] [--prototype N]` | prototype evaluation: latency, accuracy against truth and the defaulter oracle, import cleaning | yes |
 | `forecasts [--results DIR]` | store 4-week forecasts and refresh alerts: baselines, or import a Colab results folder | yes |
 | `evaluate [run]` | baseline backtest and alert precision and recall against truth (fits nothing) | yes |
+| `import-samples <facility>` | demo upload files for one facility: valid new rows plus one planted error per rule, with an answer key, in `data/samples/` | |
+| `doctor [run]` | check a machine end to end (tools, data, database, forecasts, accounts, clinical date) and print the fix for each failure | yes |
 | `e2e [run] [--screenshots]` | Playwright browser tests (desktop and phone) on a separate database; screenshots to `docs/evidence/` | yes |
 | `run` | start the backend (127.0.0.1:8000) and frontend (http://localhost:5173); Ctrl+C stops both | |
 | `diagrams` | regenerate the schema diagrams and data dictionary, render all PlantUML to `docs/evidence/` | yes |
@@ -281,6 +283,6 @@ The run folder (53 MB) stays on the machine and is never committed; `simulate` r
 | Screenshots F-WF1 to F-WF4 and F-UI-* | author to capture |
 | Gate G3 review, merge, `p1` tag | pending author sign-off |
 | Training series, backtest and selection code, Colab notebook | built and tested locally |
-| Colab run: backtest of B1, B2, SARIMA, GRU; comparison; final models | author to run on Colab after the push |
-| Stock-out alerts, nightly forecast job, Prototype 2 screens | Phase 4, next |
+| Colab run: backtest of B1, B2, SARIMA, GRU; comparison; final models; alert study | done (final run `625841d`) |
+| Stock-out alerts, nightly forecast job, Prototype 2 screens | done |
 | Supervisor: D-02, D-07, D-12, D-25, D-27 | pending |

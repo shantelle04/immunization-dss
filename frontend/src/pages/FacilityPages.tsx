@@ -1,4 +1,4 @@
-import { Alert, Box, Button, FormControlLabel, List, ListItemButton, ListItemIcon, ListItemText, MenuItem, Paper, Switch, TextField, Typography } from "@mui/material";
+import { Alert, Box, Button, FormControlLabel, Link, List, ListItemButton, ListItemIcon, ListItemText, MenuItem, Paper, Switch, TextField, Typography } from "@mui/material";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link as RouterLink } from "react-router-dom";
@@ -90,8 +90,36 @@ interface ImportResult {
   errors: { row_index: number; defect_code: string; message: string }[];
 }
 
+// The first line must match the server's expected columns exactly; the second is an example to overwrite.
+export const IMPORT_TEMPLATES: Record<string, { columns: string[]; example: (facility: string) => string[] }> = {
+  immunizations: {
+    columns: ["child_system_id", "date_of_birth", "dose_code", "given_on", "facility_code", "lot_number"],
+    example: (f) => [`IMM-${f}-00001`, "2025-06-01", "PENTA-1", "2025-07-14", f, ""],
+  },
+  stock: {
+    columns: ["date", "facility_code", "antigen_code", "lot_number", "kind", "quantity_doses"],
+    example: (f) => ["2025-12-22", f, "BCG", "", "receipt", "100"],
+  },
+};
+
+export function templateCsv(kind: string, facility: string): string {
+  const t = IMPORT_TEMPLATES[kind];
+  return `${t.columns.join(",")}\n${t.example(facility).join(",")}\n`;
+}
+
+function downloadTemplate(kind: string, facility: string) {
+  const url = URL.createObjectURL(new Blob([templateCsv(kind, facility)], { type: "text/csv" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `${kind}_template.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export function ImportPage() {
   const online = useOnline();
+  const { user } = useAuth();
+  const facility = user?.facility?.code ?? "FACILITY";
   const [kind, setKind] = useState("immunizations");
   const [dryRun, setDryRun] = useState(true);
   const [file, setFile] = useState<File | null>(null);
@@ -117,6 +145,14 @@ export function ImportPage() {
             <MenuItem value="immunizations">Immunization records</MenuItem>
             <MenuItem value="stock">Stock transactions</MenuItem>
           </TextField>
+          <Typography variant="body2" color="text.secondary">
+            The first line must be these columns, in this order: <code>{IMPORT_TEMPLATES[kind].columns.join(", ")}</code>.
+            Dates are written as YYYY-MM-DD; the lot number may be left empty.{" "}
+            <Link component="button" type="button" onClick={() => downloadTemplate(kind, facility)}>
+              Download a template
+            </Link>{" "}
+            with one example row to replace.
+          </Typography>
           <Button variant="outlined" component="label">
             {file ? file.name : "Choose a CSV file (up to 2 MB)"}
             <input type="file" accept=".csv,text/csv" hidden onChange={(e) => setFile(e.target.files?.[0] ?? null)} />

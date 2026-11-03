@@ -254,3 +254,51 @@ def test_second_load_needs_replace(tmp_path):
         load(run)
     assert load(run, replace=True)["children"] == 1
     assert Child.objects.count() == 1
+
+
+@pytest.mark.django_db
+def test_the_downloadable_templates_are_accepted_by_the_import(users, child_a, stocked):
+    """The headers of the frontend templates (FacilityPages.tsx IMPORT_TEMPLATES) are accepted as they are."""
+    manager = client_for(users["fm_a"][0])
+    for kind, text in (
+        (
+            "immunizations",
+            "child_system_id,date_of_birth,dose_code,given_on,facility_code,lot_number\n"
+            "IMM-TST-A-00001,2025-06-01,BCG-1,2025-06-02,TST-A,\n",
+        ),
+        (
+            "stock",
+            "date,facility_code,antigen_code,lot_number,kind,quantity_doses\n2025-12-22,TST-A,BCG,,receipt,100\n",
+        ),
+    ):
+        upload = SimpleUploadedFile(f"{kind}_template.csv", text.encode(), content_type="text/csv")
+        result = manager.post(
+            "/api/v1/imports", {"kind": kind, "dry_run": "true", "file": upload}, format="multipart"
+        )
+        assert result.status_code == 201, result.data
+        assert (result.data["rows_total"], result.data["rows_rejected"]) == (1, 0)
+
+
+@pytest.mark.django_db
+def test_demo_samples_are_accepted_except_exactly_the_planted_errors(users, child_a, stocked, facility_b):
+    from apps.analytics_api import samples
+
+    files = samples.build("TST-A")
+    planted = {}
+    for row in csv.DictReader(io.StringIO(files["answer_key"])):
+        planted.setdefault(row["file"], {})[int(row["row_index"])] = row["defect"]
+    manager = client_for(users["fm_a"][0])
+    for kind in ("immunizations", "stock"):
+        upload = SimpleUploadedFile(f"{kind}.csv", files[kind].encode(), content_type="text/csv")
+        result = manager.post(
+            "/api/v1/imports", {"kind": kind, "dry_run": "true", "file": upload}, format="multipart"
+        )
+        found = {e["row_index"]: e["defect_code"] for e in result.data["errors"]}
+        assert found == planted[kind], kind
+    saved = SimpleUploadedFile("i.csv", files["immunizations"].encode(), content_type="text/csv")
+    real = manager.post(
+        "/api/v1/imports", {"kind": "immunizations", "dry_run": "false", "file": saved}, format="multipart"
+    )
+    valid = real.data["rows_total"] - len(planted["immunizations"])
+    assert valid >= 1 and real.data["rows_rejected"] == len(planted["immunizations"])
+    assert child_a.events.count() == valid

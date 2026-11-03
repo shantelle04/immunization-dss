@@ -228,7 +228,7 @@ function ForecastTab() {
   if (!run || antigens.length === 0)
     return (
       <Section>
-        <EmptyState>No forecast has been run yet. Forecasts are produced by the scheduled forecast job.</EmptyState>
+        <EmptyState>No forecast has been stored yet. The forecast job runs every night after data is loaded; on a new installation the administrator runs it once.</EmptyState>
       </Section>
     );
   const series = antigens.find((a) => a.antigen === antigen) ?? antigens[0];

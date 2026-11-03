@@ -18,6 +18,30 @@ On Windows use `py scripts\dev.py <command>`. The clinical date is pinned to the
 
 **Offline (D-37).** If the connection drops, a banner appears, data already on screen stays readable, and every save button is disabled until the connection returns. No clinical data is stored on the device.
 
+## 1a. Running on another machine (checklist)
+
+A fuller version written for someone else installing the system, including training on Colab and common problems, is doc 17.
+
+Generated data, the database, Colab results and demo passwords are never in git, so a fresh clone has none of them. The Stock > Forecast tab then says no forecast is stored: that is expected until step 7 below is done.
+
+Run `python3 scripts/dev.py doctor` (Windows: `py scripts\dev.py doctor`) at any point. It checks everything below and prints the command that fixes each failed check; the result goes into the results ledger.
+
+| # | Step | Command (Windows: `py scripts\dev.py ...`) | What `doctor` checks |
+|---|---|---|---|
+| 1 | Install Python 3.12+, Node.js 20 or 22, Docker Desktop, Git | (installers) | Python version, npm and Docker found |
+| 2 | Clone the repository and install packages | `git clone ...`, then `python3 scripts/dev.py setup` | Virtual environment, frontend packages, commit hooks |
+| 3 | Create `.env` with generated secrets | `python3 scripts/dev.py env` | `.env` exists (its contents are never read or shown) |
+| 4 | Start the database | `python3 scripts/dev.py db-up` | Database reachable, migrations applied |
+| 5 | Generate the synthetic data (about 2 to 3 minutes) | `python3 scripts/dev.py simulate` | Data generated, passed the 11 checks, byte-identical to the evidence run |
+| 6 | Load it and create accounts | `python3 scripts/dev.py load`, then `python3 scripts/dev.py demo-users` | Data loaded, accounts for all three roles |
+| 7 | Store forecasts | Trained models: copy the Colab results zip to the machine, unzip it, then `python3 scripts/dev.py forecasts --results <unzipped folder>/backtest`. Without the zip: `python3 scripts/dev.py forecasts` (baselines) | Forecasts stored; trained models imported |
+| 8 | Start the app | `python3 scripts/dev.py run`, open http://localhost:5173 | Clinical date is the dataset's as-of date |
+| 9 | Confirm it works | `python3 scripts/dev.py test`, `python3 scripts/dev.py walkthrough` | 343 tests pass; walkthrough accuracy 100% |
+
+**Why step 7 can be refused.** The import compares the training data fingerprint inside the Colab results with the series rebuilt from this machine's database. It refuses the import if they differ, for example when the data was generated with different code. `doctor`'s "Data identical to the evidence run" check catches that before you try. The final results are from Colab run `625841d`; any zip from that run, or a new Colab run, works.
+
+**Accounts.** `demo-users` writes new random passwords for that machine to `.demo_credentials.txt`; passwords from another machine do not carry over. The administrator password is `DJANGO_INITIAL_ADMIN_PASSWORD` in that machine's `.env`.
+
 ## 2. Screens by role
 
 ### Health worker
@@ -49,6 +73,49 @@ Everything the health worker has, plus: acknowledge an alert (Stock > Stock), ch
 | Users | Create accounts (no self-registration), deactivate or reactivate, set a new password (also clears a lockout); an administrator cannot deactivate their own account |
 | Facilities | List and add facilities |
 | Schedule | Edit each dose's recommended, minimum and maximum age and minimum interval; the order minimum <= recommended <= maximum is enforced |
+
+## 2a. Import data (facility manager)
+
+**What it is for.** Bringing many records into the system at once from a spreadsheet saved as CSV, instead of typing them one by one: for example a paper register digitised after an outreach day, or stock records kept elsewhere. It is requirement FR-40 and is open to the facility manager only.
+
+**Two kinds of file.** The first line must hold exactly these columns, in this order (UTF-8 CSV, at most 5,000 rows, at most 2 MB):
+
+| Kind | Columns | One row means |
+|---|---|---|
+| Immunization records | `child_system_id, date_of_birth, dose_code, given_on, facility_code, lot_number` | A dose given to a registered child |
+| Stock transactions | `date, facility_code, antigen_code, lot_number, kind, quantity_doses` | A receipt, issue, wastage, loss or adjustment |
+
+**Check first, then import.** The switch "Check only (dry run)" is on by default.
+
+1. **Check file** reads every row, applies the rules below and lists each rejected row with the reason. Nothing is saved.
+2. Correct the file and check again until the report is clean, or accept that the listed rows will be skipped.
+3. Turn the switch off and choose **Import file**. Every row that passes is saved; rejected rows are skipped and listed.
+
+**Rules applied to every row** (the first rule a row breaks is reported):
+
+| Immunization records | Stock transactions |
+|---|---|
+| Child ID present; dates written as YYYY-MM-DD; dose code exists; facility exists and is the manager's own; date not in the future and not before birth; child registered; date of birth matches the registry; not repeated in the file; dose not already recorded | Dates as YYYY-MM-DD; facility exists and is the manager's own; vaccine code exists; kind is one of receipt, issue, wastage, loss, adjustment; quantity is a whole number; a receipt is positive; date not in the future |
+
+**What saving does.** Each accepted row goes through the same rules as entering it on screen, so it gets the same protection:
+- An immunization row checks the schedule (age limits, order, interval), adds the dose to the child's passport, and issues one dose from stock.
+- A stock row updates the ledger and is refused if it would make stock negative.
+
+A row refused at this stage is reported as REFUSED with the reason. Each upload, dry run or real, is kept as an import batch with its row errors and appears in the Audit log.
+
+**Templates.** The screen shows the required columns for the chosen kind and a **Download a template** link: a CSV with the exact header and one example row filled in with the signed-in manager's facility code, to overwrite with real rows.
+
+**Demo files.** `python3 scripts/dev.py import-samples <facility code>` (for example `SYN-S01`) writes three files to `data/samples/` (never committed):
+
+| File | Contents |
+|---|---|
+| `<facility>_immunizations.csv` | 20 valid new rows (doses due or overdue today for that facility's children, so not yet recorded) and 9 planted errors, one per rule: missing child ID, wrong date format, unknown dose, another facility, future date, date before birth, unknown child, wrong date of birth, duplicate |
+| `<facility>_stock.csv` | 8 valid receipts and 7 planted errors: unknown vaccine, unknown kind, quantity not a number, negative receipt, future date, wrong date format, another facility |
+| `<facility>_answer_key.csv` | Which row carries which planted error |
+
+Sign in as that facility's manager (for `SYN-S01`, `fm-syn-s01`), choose Import data, upload each file with **Check file**: exactly the planted rows are rejected (9 and 7) and every valid row passes. Importing the immunization file for real then records the 20 doses, takes them from stock, and those children drop off the defaulter list. Only run it for real on demo data, since it changes the database.
+
+**How it was measured.** Separately, the generator produces two files with deliberately broken rows and an answer key (`imports/` in the dataset), used by the walkthrough. The checks caught 119 of 120 planted errors and rejected 0 of 697 clean rows. The one miss is a day-month swap that still gives a valid date. Those files are cut from records that are already loaded and mix several facilities, so they are not suitable for uploading on screen; use the demo files above instead.
 
 ## 3. How a stock-out alert is decided (D-38)
 
