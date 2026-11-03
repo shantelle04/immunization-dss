@@ -74,6 +74,37 @@ Everything the health worker has, plus: acknowledge an alert (Stock > Stock), ch
 | Facilities | List and add facilities |
 | Schedule | Edit each dose's recommended, minimum and maximum age and minimum interval; the order minimum <= recommended <= maximum is enforced |
 
+## 2a. Import data (facility manager)
+
+**What it is for.** Bringing many records into the system at once from a spreadsheet saved as CSV, instead of typing them one by one: for example a paper register digitised after an outreach day, or stock records kept elsewhere. It is requirement FR-40 and is open to the facility manager only.
+
+**Two kinds of file.** The first line must hold exactly these columns, in this order (UTF-8 CSV, at most 5,000 rows, at most 2 MB):
+
+| Kind | Columns | One row means |
+|---|---|---|
+| Immunization records | `child_system_id, date_of_birth, dose_code, given_on, facility_code, lot_number` | A dose given to a registered child |
+| Stock transactions | `date, facility_code, antigen_code, lot_number, kind, quantity_doses` | A receipt, issue, wastage, loss or adjustment |
+
+**Check first, then import.** The switch "Check only (dry run)" is on by default.
+
+1. **Check file** reads every row, applies the rules below and lists each rejected row with the reason. Nothing is saved.
+2. Correct the file and check again until the report is clean, or accept that the listed rows will be skipped.
+3. Turn the switch off and choose **Import file**. Every row that passes is saved; rejected rows are skipped and listed.
+
+**Rules applied to every row** (the first rule a row breaks is reported):
+
+| Immunization records | Stock transactions |
+|---|---|
+| Child ID present; dates written as YYYY-MM-DD; dose code exists; facility exists and is the manager's own; date not in the future and not before birth; child registered; date of birth matches the registry; not repeated in the file; dose not already recorded | Dates as YYYY-MM-DD; facility exists and is the manager's own; vaccine code exists; kind is one of receipt, issue, wastage, loss, adjustment; quantity is a whole number; a receipt is positive; date not in the future |
+
+**What saving does.** Each accepted row goes through the same rules as entering it on screen, so it gets the same protection:
+- An immunization row checks the schedule (age limits, order, interval), adds the dose to the child's passport, and issues one dose from stock.
+- A stock row updates the ledger and is refused if it would make stock negative.
+
+A row refused at this stage is reported as REFUSED with the reason. Each upload, dry run or real, is kept as an import batch with its row errors and appears in the Audit log.
+
+**How it was measured.** The generator produces two files with deliberately broken rows and an answer key (`imports/` in the dataset). The checks caught 119 of 120 planted errors and rejected 0 of 697 clean rows. The one miss is a day-month swap that still gives a valid date. Those files mix several facilities, so when you upload them as one manager, rows for other facilities are correctly rejected as "own facility only". For a demonstration, use rows for that manager's own facility.
+
 ## 3. How a stock-out alert is decided (D-38)
 
 For each vaccine at a facility, after every forecast run:
