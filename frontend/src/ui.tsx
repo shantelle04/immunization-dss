@@ -29,10 +29,42 @@ export function fmtDate(iso: string | null | undefined, short = false): string {
   return Number.isNaN(d.getTime()) ? iso : (short ? SHORT : DATE).format(d);
 }
 
-export function ageLabel(days: number): string {
-  if (days < 60) return `${Math.floor(days / 7)} wk`;
-  const months = Math.floor(days / 30.44);
-  return months < 24 ? `${months} mo` : `${Math.floor(months / 12)} y`;
+const MONTH_DAYS = 30.4375;
+
+function plural(n: number, unit: string): string {
+  return `${n} ${unit}${n === 1 ? "" : "s"}`;
+}
+
+// Days in the first week, weeks for the first two months, months to age 2, then years and months: how clinic cards state age.
+export function ageInFull(days: number): string {
+  if (days < 7) return plural(days, "day");
+  if (days < 56) return plural(Math.floor(days / 7), "week");
+  const months = Math.floor(days / MONTH_DAYS);
+  if (months < 24) return plural(months, "month");
+  const rest = months % 12;
+  return plural(Math.floor(months / 12), "year") + (rest ? ` ${plural(rest, "month")}` : "");
+}
+
+export const AGE_BANDS = [
+  { key: "0-5", label: "0 to 5 months", below: 6 },
+  { key: "6-11", label: "6 to 11 months", below: 12 },
+  { key: "12-17", label: "12 to 17 months", below: 18 },
+  { key: "18-23", label: "18 to 23 months", below: 24 },
+  { key: "24+", label: "2 years and over", below: Infinity },
+] as const;
+
+export function ageBand(days: number): (typeof AGE_BANDS)[number] {
+  const months = Math.floor(days / MONTH_DAYS);
+  return AGE_BANDS.find((b) => months < b.below) ?? AGE_BANDS[AGE_BANDS.length - 1];
+}
+
+export const SEXES = [
+  { code: "F", label: "Female" },
+  { code: "M", label: "Male" },
+] as const;
+
+export function sexLabel(code: string): string {
+  return SEXES.find((s) => s.code === code)?.label ?? code;
 }
 
 export function titleCase(text: string): string {

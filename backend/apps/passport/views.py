@@ -19,6 +19,7 @@ from .models import Child, ScheduleDose, Sex
 
 class ChildSerializer(serializers.ModelSerializer):
     registration_facility = serializers.CharField(source="registration_facility.code", read_only=True)
+    age_days = serializers.SerializerMethodField()
 
     class Meta:
         model = Child
@@ -33,8 +34,13 @@ class ChildSerializer(serializers.ModelSerializer):
             "registration_facility",
             "registered_on",
             "is_synthetic",
+            "age_days",
         ]
         read_only_fields = ["id", "system_id", "registration_facility", "registered_on", "is_synthetic"]
+
+    def get_age_days(self, child: Child) -> int:
+        """Age on the clinical date (D-32), so it agrees with the dose states shown beside it."""
+        return (today() - child.date_of_birth).days
 
 
 class RegisterSerializer(serializers.Serializer):
@@ -49,6 +55,24 @@ class RegisterSerializer(serializers.Serializer):
         if value > today():
             raise serializers.ValidationError("The date of birth cannot be in the future.")
         return value
+
+
+class ChildUpdateSerializer(serializers.Serializer):
+    given_name = serializers.CharField(max_length=80, required=False)
+    family_name = serializers.CharField(max_length=80, required=False)
+    sex = serializers.ChoiceField(choices=Sex.choices, required=False)
+    date_of_birth = serializers.DateField(required=False)
+    caregiver_name = serializers.CharField(max_length=120, required=False)
+
+    def validate_date_of_birth(self, value):
+        if value > today():
+            raise serializers.ValidationError("The date of birth cannot be in the future.")
+        return value
+
+    def validate(self, attrs):
+        if not attrs:
+            raise serializers.ValidationError("Nothing to change.")
+        return attrs
 
 
 class ChildListView(FacilityScopedQuerysetMixin, ListAPIView):
@@ -115,6 +139,19 @@ class ChildDetailView(APIView):
         cross = child.registration_facility_id != request.user.facility_id
         audit(request.user, AuditAction.READ, "child", child.pk, cross_facility=cross)
         return Response({**ChildSerializer(child).data, "read_only": cross})
+
+    def patch(self, request, pk):
+        """Correct the child's details (FR-30): only at the facility where the child is registered."""
+        child = _child_for(request, pk)
+        if child.registration_facility_id != request.user.facility_id:
+            raise PermissionDenied("Records from another facility are read-only here.")
+        data = ChildUpdateSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        try:
+            child = services.update_details(child, dict(data.validated_data), request.user)
+        except services.DetailsRefused as exc:
+            raise ValidationError({"date_of_birth": [str(exc)]}) from exc
+        return Response({**ChildSerializer(child).data, "read_only": False})
 
 
 class DoseSerializer(serializers.Serializer):

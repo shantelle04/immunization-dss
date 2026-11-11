@@ -19,13 +19,29 @@ import { useState, type FormEvent } from "react";
 import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { DataList, ErrorNote, Loading, PageHeader, Section, StatusChip, ageLabel, fmtDate, titleCase, useOnline } from "../ui";
+import {
+  AGE_BANDS,
+  DataList,
+  ErrorNote,
+  Loading,
+  PageHeader,
+  SEXES,
+  Section,
+  StatusChip,
+  ageBand,
+  ageInFull,
+  fmtDate,
+  sexLabel,
+  titleCase,
+  useOnline,
+} from "../ui";
 
 interface Defaulter {
   rank: number;
   child_id: string;
   system_id: string;
   name: string;
+  sex: string;
   age_days: number;
   overdue_count: number;
   overdue: string[];
@@ -41,8 +57,49 @@ export interface SessionRow {
   status: string;
 }
 
+function Profile({ results }: { results: Defaulter[] }) {
+  const bySex = SEXES.map((s) => ({ ...s, count: results.filter((d) => d.sex === s.code).length }));
+  const byAge = AGE_BANDS.map((b) => ({ ...b, count: results.filter((d) => ageBand(d.age_days).key === b.key) }));
+  const share = (n: number) => (results.length ? `${Math.round((100 * n) / results.length)}%` : "-");
+  return (
+    <Section title="Who is overdue">
+      <Box sx={{ display: "grid", gap: 3, gridTemplateColumns: { xs: "1fr", md: "1fr 2fr" } }}>
+        <DataList
+          caption="Defaulters by sex"
+          rows={bySex}
+          rowKey={(r) => r.code}
+          columns={[
+            { key: "sex", label: "Sex", primary: true, render: (r) => r.label },
+            { key: "n", label: "Children", align: "right", render: (r) => r.count },
+            { key: "pct", label: "Share", align: "right", render: (r) => share(r.count) },
+          ]}
+        />
+        <DataList
+          caption="Defaulters by age group"
+          rows={byAge.filter((b) => b.key !== "24+")}
+          rowKey={(r) => r.key}
+          columns={[
+            { key: "age", label: "Age group", primary: true, render: (r) => r.label },
+            { key: "n", label: "Children", align: "right", render: (r) => r.count.length },
+            { key: "pct", label: "Share", align: "right", render: (r) => share(r.count.length) },
+            {
+              key: "female",
+              label: "Female / male",
+              align: "right",
+              render: (r) =>
+                `${r.count.filter((d) => d.sex === "F").length} / ${r.count.filter((d) => d.sex === "M").length}`,
+            },
+          ]}
+        />
+      </Box>
+    </Section>
+  );
+}
+
 function Defaulters() {
   const [filter, setFilter] = useState("");
+  const [sex, setSex] = useState("");
+  const [band, setBand] = useState("");
   const list = useQuery({
     queryKey: ["defaulters"],
     queryFn: () => api<{ as_of: string; count: number; results: Defaulter[] }>("/defaulters"),
@@ -51,22 +108,44 @@ function Defaulters() {
   if (list.isError) return <ErrorNote error={list.error} />;
   const { as_of, count, results } = list.data;
   const needle = filter.trim().toLowerCase();
-  const rows = needle
-    ? results.filter((d) => d.name.toLowerCase().includes(needle) || d.system_id.toLowerCase().includes(needle))
-    : results;
+  const rows = results.filter(
+    (d) =>
+      (!needle || d.name.toLowerCase().includes(needle) || d.system_id.toLowerCase().includes(needle)) &&
+      (!sex || d.sex === sex) &&
+      (!band || ageBand(d.age_days).key === band),
+  );
   return (
+    <>
+    <Profile results={results} />
     <Section title={`Defaulters (${count}) as of ${fmtDate(as_of)}`}>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
         Children under 2 with a dose more than 28 days past its due date. Order: most overdue doses first, then
         the child closest to a vaccine's upper age limit.
       </Typography>
-      <TextField
-        label="Filter by name or system ID"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        fullWidth
-        sx={{ mb: 2, maxWidth: 420 }}
-      />
+      <Box sx={{ display: "grid", gap: 2, mb: 2, gridTemplateColumns: { xs: "1fr", sm: "2fr 1fr 1fr" }, maxWidth: 760 }}>
+        <TextField label="Filter by name or system ID" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <TextField select label="Sex" value={sex} onChange={(e) => setSex(e.target.value)}>
+          <MenuItem value="">All</MenuItem>
+          {SEXES.map((s) => (
+            <MenuItem key={s.code} value={s.code}>
+              {s.label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField select label="Age group" value={band} onChange={(e) => setBand(e.target.value)}>
+          <MenuItem value="">All</MenuItem>
+          {AGE_BANDS.filter((b) => b.key !== "24+").map((b) => (
+            <MenuItem key={b.key} value={b.key}>
+              {b.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Box>
+      {rows.length !== results.length && (
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          {rows.length} of {count} shown; the rank is still the rank in the full list.
+        </Typography>
+      )}
       <DataList
         caption="Prioritised defaulter list for outreach planning"
         rows={rows.slice(0, 200)}
@@ -89,7 +168,8 @@ function Defaulters() {
               </>
             ),
           },
-          { key: "age", label: "Age", render: (d) => ageLabel(d.age_days) },
+          { key: "sex", label: "Sex", render: (d) => sexLabel(d.sex) },
+          { key: "age", label: "Age", render: (d) => ageInFull(d.age_days) },
           {
             key: "count",
             label: "Overdue doses",
@@ -102,10 +182,11 @@ function Defaulters() {
       />
       {rows.length > 200 && (
         <Typography variant="caption" color="text.secondary">
-          Showing the first 200 of {rows.length}; use the filter to narrow the list.
+          Showing the first 200 of {rows.length}; use the filters to narrow the list.
         </Typography>
       )}
     </Section>
+    </>
   );
 }
 

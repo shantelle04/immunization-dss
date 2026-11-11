@@ -15,7 +15,19 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
 import { Link as RouterLink, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiError, api } from "../api";
-import { DataList, ErrorNote, Loading, PageHeader, Section, fmtDate, useOnline, type Column } from "../ui";
+import {
+  DataList,
+  ErrorNote,
+  Loading,
+  PageHeader,
+  SEXES,
+  Section,
+  ageInFull,
+  fmtDate,
+  sexLabel,
+  useOnline,
+  type Column,
+} from "../ui";
 
 export interface ChildSummary {
   id: string;
@@ -25,6 +37,7 @@ export interface ChildSummary {
   sex: string;
   date_of_birth: string;
   registration_facility: string;
+  age_days: number;
 }
 
 const EMPTY = { given_name: "", family_name: "", sex: "F", date_of_birth: "", caregiver_name: "" };
@@ -41,8 +54,10 @@ const COLUMNS: Column<ChildSummary>[] = [
       </Link>
     ),
   },
-  { key: "id", label: "System ID", render: (c) => c.system_id },
+  { key: "sex", label: "Sex", render: (c) => sexLabel(c.sex) },
+  { key: "age", label: "Age", render: (c) => ageInFull(c.age_days) },
   { key: "dob", label: "Date of birth", render: (c) => fmtDate(c.date_of_birth) },
+  { key: "id", label: "System ID", render: (c) => c.system_id },
   { key: "facility", label: "Registered at", render: (c) => c.registration_facility },
 ];
 
@@ -114,7 +129,7 @@ function Find() {
             caption="The 10 children most recently registered at this facility"
             rows={recent.data.results}
             rowKey={(c) => c.id}
-            columns={COLUMNS.slice(0, 3)}
+            columns={COLUMNS.slice(0, 5)}
           />
         )}
       </Section>
@@ -158,8 +173,11 @@ function Register() {
           required
         />
         <TextField select label="Sex" value={form.sex} onChange={(e) => setForm({ ...form, sex: e.target.value })}>
-          <MenuItem value="F">Female</MenuItem>
-          <MenuItem value="M">Male</MenuItem>
+          {SEXES.map((x) => (
+            <MenuItem key={x.code} value={x.code}>
+              {x.label}
+            </MenuItem>
+          ))}
         </TextField>
         <TextField
           label="Date of birth"

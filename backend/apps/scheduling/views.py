@@ -41,6 +41,7 @@ class DefaulterListView(APIView):
                         "child_id": d.child.pk,
                         "system_id": d.child.system_id,
                         "name": f"{d.child.given_name} {d.child.family_name}",
+                        "sex": d.child.sex,
                         "age_days": (on - d.child.date_of_birth).days,
                         "overdue_count": d.overdue_count,
                         "overdue": [s.dose_code for s in d.overdue],

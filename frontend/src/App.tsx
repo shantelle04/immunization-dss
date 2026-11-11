@@ -5,6 +5,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import type { Role } from "./api";
 import { AuthProvider } from "./auth";
 import { AdminFacilitiesPage, AdminOverviewPage, AdminSchedulePage, AdminUsersPage } from "./pages/AdminPage";
+import ChildEditPage from "./pages/ChildEditPage";
 import ChildPage from "./pages/ChildPage";
 import ChildrenPage from "./pages/ChildrenPage";
 import { AuditPage, ImportPage, MorePage, SchedulePage } from "./pages/FacilityPages";
@@ -29,6 +30,7 @@ const PAGES: { path: string; roles: Role[]; element: ReactNode }[] = [
   { path: "/scheduling/sessions/:id", roles: CLINICAL, element: <SessionPage /> },
   { path: "/children", roles: CLINICAL, element: <ChildrenPage /> },
   { path: "/children/:id", roles: CLINICAL, element: <ChildPage /> },
+  { path: "/children/:id/edit", roles: CLINICAL, element: <ChildEditPage /> },
   { path: "/schedule", roles: CLINICAL, element: <SchedulePage /> },
   { path: "/more", roles: CLINICAL, element: <MorePage /> },
   { path: "/imports", roles: MANAGER, element: <ImportPage /> },

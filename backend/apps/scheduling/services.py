@@ -159,6 +159,8 @@ def session_detail(session: OutreachSession) -> dict:
                 "name": f"{item.child.given_name} {item.child.family_name}",
                 "caregiver_name": item.child.caregiver_name,
                 "date_of_birth": item.child.date_of_birth,
+                "sex": item.child.sex,
+                "age_days": (session.date - item.child.date_of_birth).days,
                 "attended": attended.get(item.child_id),
                 "doses": [],
             },

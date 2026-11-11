@@ -17,7 +17,20 @@ import { useState } from "react";
 import { Link as RouterLink, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useAuth } from "../auth";
-import { DataList, EmptyState, ErrorNote, Loading, PageHeader, Section, StatusChip, fmtDate, titleCase, useOnline } from "../ui";
+import {
+  DataList,
+  EmptyState,
+  ErrorNote,
+  Loading,
+  PageHeader,
+  Section,
+  StatusChip,
+  ageInFull,
+  fmtDate,
+  sexLabel,
+  titleCase,
+  useOnline,
+} from "../ui";
 
 interface PlanChild {
   rank: number;
@@ -26,6 +39,8 @@ interface PlanChild {
   name: string;
   caregiver_name: string;
   date_of_birth: string;
+  sex: string;
+  age_days: number;
   attended: boolean | null;
   doses: { dose_code: string; given: boolean }[];
 }
@@ -76,7 +91,8 @@ function ChildRow({ sessionId, child }: { sessionId: number; child: PlanChild })
             {child.rank}. {child.name}
           </Link>
           <Typography variant="caption" color="text.secondary" component="p">
-            {child.system_id}; born {fmtDate(child.date_of_birth)}; caregiver {child.caregiver_name}
+            {sexLabel(child.sex)}, {ageInFull(child.age_days)} on the session day; {child.system_id}; born{" "}
+            {fmtDate(child.date_of_birth)}; caregiver {child.caregiver_name}
           </Typography>
         </Box>
         {child.attended === true && <StatusChip tone="good" label="Attended" />}

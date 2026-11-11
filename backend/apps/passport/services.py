@@ -116,6 +116,31 @@ class DoseRefused(Exception):
     pass
 
 
+class DetailsRefused(Exception):
+    pass
+
+
+@transaction.atomic
+def update_details(child: Child, changes: dict, user: User) -> Child:
+    """Correct a child's registered details (FR-30). A new date of birth must keep every recorded dose inside
+    its schedule age window, so a correction can never make the history invalid."""
+    born = changes.get("date_of_birth")
+    if born and born != child.date_of_birth:
+        for event in child.events.select_related("schedule_dose"):
+            age = (event.given_on - born).days
+            dose = event.schedule_dose
+            if not dose.min_age_days <= age <= dose.max_age_days:
+                raise DetailsRefused(
+                    f"With this date of birth, {dose.dose_code} given on {event.given_on:%d %b %Y} "
+                    "would fall outside its age window."
+                )
+    for name, value in changes.items():
+        setattr(child, name, value)
+    child.save(update_fields=[*changes, "updated_at"])
+    audit(user, AuditAction.UPDATE, "child", child.pk)
+    return child
+
+
 @transaction.atomic
 def record_dose(
     child: Child, dose: ScheduleDose, given_on: date, lot, user: User, session=None
