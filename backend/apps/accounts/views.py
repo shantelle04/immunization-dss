@@ -4,6 +4,7 @@ from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Count
+from django.http import Http404
 from django.middleware.csrf import get_token
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -119,21 +120,73 @@ class RefreshView(PublicAuthView):
         return response
 
 
-class LogoutView(APIView):
-    permission_classes = [IsAuthenticated]
+class LogoutView(PublicAuthView):
+    """Authenticated by the refresh cookie, like refresh (D-31): signing out must still work after the
+    short-lived access token has expired, and it always clears the cookie so a reload cannot sign back in."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "refresh"
 
     def post(self, request):
         _enforce_csrf(request)
         raw = request.COOKIES.get(settings.REFRESH_COOKIE_NAME)
         if raw:
             # An expired or already revoked token still means the user is logged out.
-            with contextlib.suppress(TokenError):
-                RefreshToken(raw).blacklist()
-        audit(request.user, AuditAction.LOGOUT, "user", request.user.pk)
+            with contextlib.suppress(TokenError, KeyError):
+                token = RefreshToken(raw)
+                user = User.objects.filter(pk=token["user_id"]).first()
+                token.blacklist()
+                if user:
+                    audit(user, AuditAction.LOGOUT, "user", user.pk)
         response = Response(status=status.HTTP_204_NO_CONTENT)
         response.delete_cookie(
             settings.REFRESH_COOKIE_NAME, path=settings.REFRESH_COOKIE_PATH, samesite="Strict"
         )
+        return response
+
+
+class DemoSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+
+
+class DemoLoginView(PublicAuthView):
+    """Demonstration only (D-46): list the demo accounts and sign in as one without a password. Real users
+    always type their own credentials. With IMMDSS_DEMO_LOGIN off, both methods answer 404 as if the route
+    did not exist, and only accounts flagged is_demo are ever offered."""
+
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "login"
+
+    def initial(self, request, *args, **kwargs):
+        if not settings.DEMO_LOGIN:
+            raise Http404
+        super().initial(request, *args, **kwargs)
+
+    def get_throttles(self):
+        return super().get_throttles() if self.request.method == "POST" else []
+
+    def get(self, request):
+        accounts = User.objects.filter(is_demo=True, is_active=True).select_related("facility")
+        ordered = sorted(accounts, key=lambda u: (u.facility.code if u.facility_id else "", u.role))
+        return Response({"accounts": [_user_payload(u) for u in ordered]})
+
+    def post(self, request):
+        data = DemoSerializer(data=request.data)
+        data.is_valid(raise_exception=True)
+        user = (
+            User.objects.select_related("facility")
+            .filter(username=data.validated_data["username"], is_demo=True, is_active=True)
+            .first()
+        )
+        if user is None:
+            raise AuthenticationFailed("Not a demonstration account.")
+        user.last_login = timezone.now()
+        user.save(update_fields=["last_login", "updated_at"])
+        audit(user, AuditAction.LOGIN, "demo_session", user.pk)
+        refresh = RefreshToken.for_user(user)
+        response = Response({"access": str(refresh.access_token), "user": _user_payload(user)})
+        _set_refresh_cookie(response, refresh)
+        get_token(request)
         return response
 
 

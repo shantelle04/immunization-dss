@@ -30,6 +30,7 @@ package "accounts" {
     * is_active : boolean
     * failed_logins : smallint
     locked_until : timestamptz
+    * is_demo : boolean
     last_login : timestamptz
   }
   entity "accounts_auditlog" as auditlog {

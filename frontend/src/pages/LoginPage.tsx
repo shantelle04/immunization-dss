@@ -3,6 +3,7 @@ import { Alert, Avatar, Box, Button, Paper, TextField, Typography } from "@mui/m
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../auth";
+import { DemoPicker, useDemoAccounts } from "../demo";
 import { homeFor } from "../routes";
 import { ThemeToggle } from "../shell";
 
@@ -12,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const demo = useDemoAccounts();
 
   if (user) return <Navigate to={homeFor(user)} replace />;
 
@@ -106,6 +108,7 @@ export default function LoginPage() {
           <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 2 }}>
             Repeated failed attempts lock the account for a short time. All records in this system are synthetic.
           </Typography>
+          {demo.length > 0 && <DemoPicker accounts={demo} />}
         </Paper>
       </Box>
     </Box>

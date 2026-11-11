@@ -11,6 +11,14 @@ from apps.facilities.models import Facility
 CREDENTIALS = Path(settings.BASE_DIR).parent / ".demo_credentials.txt"
 
 
+def _passwords_already_written() -> dict[str, str]:
+    """Rerunning the command keeps the passwords the file already holds instead of overwriting them."""
+    if not CREDENTIALS.exists():
+        return {}
+    rows = (line.split("\t") for line in CREDENTIALS.read_text(encoding="utf-8").splitlines())
+    return {r[0]: r[3] for r in rows if len(r) == 4 and r[0] != "username" and not r[3].startswith("(")}
+
+
 class Command(BaseCommand):
     help = (
         "Create the administrator (password from DJANGO_INITIAL_ADMIN_PASSWORD) and one manager and one "
@@ -24,7 +32,11 @@ class Command(BaseCommand):
         if not Facility.objects.exists():
             raise CommandError("No facilities: load a synthetic run first.")
         lines = []
-        admin, created = User.objects.get_or_create(username="admin", defaults={"role": Role.SYSTEM_ADMIN})
+        names = ["admin"]
+        known = _passwords_already_written()
+        admin, created = User.objects.get_or_create(
+            username="admin", defaults={"role": Role.SYSTEM_ADMIN, "is_demo": True}
+        )
         if created or reset:
             admin.set_password(os.environ["DJANGO_INITIAL_ADMIN_PASSWORD"])
             admin.save()
@@ -32,8 +44,9 @@ class Command(BaseCommand):
         for facility in Facility.objects.order_by("code"):
             for role, prefix in ((Role.FACILITY_MANAGER, "fm"), (Role.HEALTHCARE_WORKER, "hcw")):
                 username = f"{prefix}-{facility.code.lower()}"
+                names.append(username)
                 user, created = User.objects.get_or_create(
-                    username=username, defaults={"role": role, "facility": facility}
+                    username=username, defaults={"role": role, "facility": facility, "is_demo": True}
                 )
                 if created or reset:
                     password = secrets.token_urlsafe(12)
@@ -41,8 +54,10 @@ class Command(BaseCommand):
                     user.save()
                     lines.append(f"{username}\t{role}\t{facility.code}\t{password}")
                 else:
-                    kept = "(unchanged; use --reset for a new one)"
+                    kept = known.get(username, "(unchanged; use --reset for a new one)")
                     lines.append(f"{username}\t{role}\t{facility.code}\t{kept}")
+        # Accounts created before the is_demo flag existed are marked too.
+        User.objects.filter(username__in=names).update(is_demo=True)
         fd = os.open(CREDENTIALS, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write("# Demo accounts for synthetic data only. Never commit or share this file.\n")

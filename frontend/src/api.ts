@@ -102,9 +102,27 @@ export async function login(username: string, password: string): Promise<User> {
   return data.user;
 }
 
+// Demonstration sign-in (D-46). The server answers 404 unless the demo switch is on, so a real installation
+// never shows the account picker.
+export async function demoAccounts(): Promise<User[] | null> {
+  const response = await send("/auth/demo", {});
+  if (response.status === 404) return null;
+  return (await parse<{ accounts: User[] }>(response)).accounts;
+}
+
+export async function demoLogin(username: string): Promise<User> {
+  const data = await parse<{ access: string; user: User }>(
+    await send("/auth/demo", { method: "POST", body: { username } }),
+  );
+  setAccessToken(data.access);
+  return data.user;
+}
+
 export async function logout(): Promise<void> {
   try {
     await send("/auth/logout", { method: "POST" });
+  } catch {
+    // Offline: the screen still signs out; the server-side session ends when its cookie expires.
   } finally {
     setAccessToken(null);
   }

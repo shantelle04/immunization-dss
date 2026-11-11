@@ -27,6 +27,15 @@ SECRET_KEY = os.environ["DJANGO_SECRET_KEY"]
 DEBUG = os.environ.get("DJANGO_DEBUG", "false").lower() == "true"
 ALLOWED_HOSTS = _list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
+# Demonstration sign-in by picking an account (D-46). Off unless the local runner turns it on, and refused on
+# any host other than this computer, so a deployed server can never offer it.
+DEMO_LOGIN = os.environ.get("IMMDSS_DEMO_LOGIN", "false").lower() == "true"
+if DEMO_LOGIN and set(ALLOWED_HOSTS) - {"localhost", "127.0.0.1"}:
+    raise ImproperlyConfigured(
+        "IMMDSS_DEMO_LOGIN=true is allowed only when DJANGO_ALLOWED_HOSTS is limited to "
+        "localhost and 127.0.0.1."
+    )
+
 INSTALLED_APPS = [
     "django.contrib.auth",
     "django.contrib.contenttypes",

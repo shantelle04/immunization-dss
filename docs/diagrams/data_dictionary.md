@@ -44,6 +44,7 @@ Log-in accounts; created by the system administrator only (FR-01, FR-03)
 | `is_active` | boolean | DEFAULT true | - |
 | `failed_logins` | smallint | DEFAULT 0 (lockout, NFR-03) | - |
 | `locked_until` | timestamptz | NULL | - |
+| `is_demo` | boolean | DEFAULT false (demonstration sign-in, D-46) | - |
 | `last_login` | timestamptz | NULL | - |
 
 ## `accounts_auditlog`

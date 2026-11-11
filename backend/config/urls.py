@@ -11,6 +11,7 @@ api = [
     path("auth/login", accounts.LoginView.as_view(), name="auth-login"),
     path("auth/refresh", accounts.RefreshView.as_view(), name="auth-refresh"),
     path("auth/logout", accounts.LogoutView.as_view(), name="auth-logout"),
+    path("auth/demo", accounts.DemoLoginView.as_view(), name="auth-demo"),
     path("auth/me", accounts.MeView.as_view(), name="auth-me"),
     path("children", passport.ChildListView.as_view(), name="children"),
     path("children/search", passport.ChildSearchView.as_view(), name="children-search"),

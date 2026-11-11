@@ -459,6 +459,7 @@ def e2e(args: argparse.Namespace) -> None:
         **_clinical_env(),
         "DJANGO_SETTINGS_MODULE": "config.settings_e2e",
         "IMMDSS_E2E_PASSWORD": password,
+        "IMMDSS_DEMO_LOGIN": "true",
         "DJANGO_CORS_ORIGINS": "http://localhost:5174,http://127.0.0.1:5174",
     }
     prepare = run(
@@ -530,9 +531,10 @@ def import_samples(args: argparse.Namespace) -> None:
         sys.exit(result.code)
 
 
-def run_app(_: argparse.Namespace) -> None:
-    """Backend on 127.0.0.1:8000 and the frontend on http://localhost:5173 (API proxied); Ctrl+C stops."""
-    env = {**os.environ, **_clinical_env()}
+def run_app(args: argparse.Namespace) -> None:
+    """Backend on 127.0.0.1:8000 and the frontend on http://localhost:5173 (API proxied); Ctrl+C stops.
+    Demonstration sign-in (D-46) is on unless --no-demo; Django refuses it on any host but this computer."""
+    env = {**os.environ, **_clinical_env(), "IMMDSS_DEMO_LOGIN": "false" if args.no_demo else "true"}
     # Each server gets its own process group so stopping it also stops children (npm starts vite).
     if os.name == "nt":
         group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
@@ -541,7 +543,8 @@ def run_app(_: argparse.Namespace) -> None:
     server = [str(PY), "manage.py", "runserver", "127.0.0.1:8000"]
     backend = subprocess.Popen(server, cwd=ROOT / "backend", env=env, **group)
     frontend = subprocess.Popen([npm(), "run", "dev"], cwd=ROOT / "frontend", env=env, **group)
-    print("\nOpen http://localhost:5173  (Ctrl+C to stop)\n", flush=True)
+    mode = "passwords only" if args.no_demo else "demonstration account picker on (use --no-demo to hide it)"
+    print(f"\nOpen http://localhost:5173  ({mode}; Ctrl+C to stop)\n", flush=True)
     signal.signal(signal.SIGTERM, _interrupt)  # a plain kill also stops both servers
     try:
         backend.wait()
@@ -785,9 +788,13 @@ def main() -> None:
         ("lint", lint, "ruff check and format check"),
         ("history", history, "render docs/logs/results_ledger.jsonl as RESULTS_HISTORY.md"),
         ("diagrams", diagrams, "render docs/diagrams/*.puml to SVG and PNG (PlantUML in Docker)"),
-        ("run", run_app, "start backend and frontend: http://localhost:5173"),
     ]:
         sub.add_parser(name, help=doc).set_defaults(func=func)
+    p_run = sub.add_parser("run", help="start backend and frontend: http://localhost:5173")
+    p_run.add_argument(
+        "--no-demo", action="store_true", help="hide the demonstration account picker (D-46); passwords only"
+    )
+    p_run.set_defaults(func=run_app)
     p_sim = sub.add_parser(
         "simulate", help="generate the dataset; skipped if an identical validated run exists"
     )

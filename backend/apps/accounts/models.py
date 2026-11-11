@@ -28,6 +28,8 @@ class User(AbstractBaseUser, Timestamped):
     is_active = models.BooleanField(default=True)
     failed_logins = models.SmallIntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
+    # Only accounts made by seed_demo_users carry this; demonstration sign-in (D-46) offers no other account.
+    is_demo = models.BooleanField(default=False)
 
     objects = UserManager()
 

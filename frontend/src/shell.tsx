@@ -37,9 +37,10 @@ import {
 } from "@mui/material";
 import { useColorScheme } from "@mui/material/styles";
 import type { ReactNode } from "react";
-import { Link as RouterLink, Outlet, useLocation } from "react-router-dom";
+import { Link as RouterLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import type { Role } from "./api";
 import { useAuth } from "./auth";
+import { DemoBanner, useDemoAccounts } from "./demo";
 import { titleCase, useOnline } from "./ui";
 
 export const DRAWER_WIDTH = 248;
@@ -123,7 +124,10 @@ export function Layout() {
   const { user, signOut } = useAuth();
   const { pathname } = useLocation();
   const online = useOnline();
+  const navigate = useNavigate();
+  const demo = useDemoAccounts().length > 0;
   if (!user) return null;
+  const switchAccount = () => void signOut().then(() => navigate("/login"));
   const items = NAV.filter((i) => i.roles.includes(user.role));
   const main = items.filter((i) => i.group === "main");
   const hasMore = items.some((i) => i.group === "facility");
@@ -204,6 +208,8 @@ export function Layout() {
             </IconButton>
           </Toolbar>
         </AppBar>
+
+        {demo && <DemoBanner user={user} onSwitch={switchAccount} />}
 
         {!online && (
           <Alert severity="warning" icon={<WifiOffIcon />} square role="status">

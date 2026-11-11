@@ -66,7 +66,7 @@ def main() -> int:
         facility = None if index is None else facilities[index]
         user, _ = User.objects.get_or_create(username=username, defaults={"role": role, "facility": facility})
         user.set_password(password)
-        user.is_active, user.failed_logins, user.locked_until = True, 0, None
+        user.is_active, user.failed_logins, user.locked_until, user.is_demo = True, 0, None, True
         user.save()
     print(f"e2e database ready: {Facility.objects.count()} facilities, {len(ACCOUNTS)} test accounts")
     return 0
