@@ -36,7 +36,7 @@ Run `python3 scripts/dev.py doctor` (Windows: `py scripts\dev.py doctor`) at any
 | 6 | Load it and create accounts | `python3 scripts/dev.py load`, then `python3 scripts/dev.py demo-users` | Data loaded, accounts for all three roles |
 | 7 | Store forecasts | Trained models: copy the Colab results zip to the machine, unzip it, then `python3 scripts/dev.py forecasts --results <unzipped folder>/backtest`. Without the zip: `python3 scripts/dev.py forecasts` (baselines) | Forecasts stored; trained models imported |
 | 8 | Start the app | `python3 scripts/dev.py run`, open http://localhost:5173 | Clinical date is the dataset's as-of date |
-| 9 | Confirm it works | `python3 scripts/dev.py test`, `python3 scripts/dev.py walkthrough` | 343 tests pass; walkthrough accuracy 100% |
+| 9 | Confirm it works | `python3 scripts/dev.py test`, `python3 scripts/dev.py walkthrough` | 393 tests pass; walkthrough accuracy 100% |
 
 **Why step 7 can be refused.** The import compares the training data fingerprint inside the Colab results with the series rebuilt from this machine's database. It refuses the import if they differ, for example when the data was generated with different code. `doctor`'s "Data identical to the evidence run" check catches that before you try. The final results are from Colab run `625841d`; any zip from that run, or a new Colab run, works.
 
@@ -53,12 +53,13 @@ Run `python3 scripts/dev.py doctor` (Windows: `py scripts\dev.py doctor`) at any
 | Stock > Forecast | Choose a vaccine: the last 26 weeks of doses issued, the forecast for the next 4 weeks with its 80% interval, the model used and its backtest accuracy (MASE, MAE, sMAPE, interval coverage). Chart or table |
 | Stock > Ledger | Record a receipt, issue, wastage, loss or adjustment (stock can never go negative); the latest 25 entries |
 | Stock > Settings | Delivery cycle and safety buffer per vaccine (read only) |
-| Outreach > Defaulters | Children under 2 with a dose more than 28 days overdue, most missed doses first, then nearest to an age limit; filter by name or ID |
+| Outreach > Defaulters | "Who is overdue": defaulters by sex and by age group (0 to 5, 6 to 11, 12 to 17, 18 to 23 months). Then the list: children under 2 with a dose more than 28 days overdue, most missed doses first, then nearest to an age limit, with each child's sex and age; filter by name or ID, sex and age group (the rank stays the rank in the full list) |
 | Outreach > Sessions | Sessions of the facility; open one to see its plan and record attendance |
-| Session | Vaccines needed against stock and the forecast (shortfalls flagged), the planned children in priority order; tick the doses given and save, or mark "did not attend". Saving records the doses on the child's passport and issues them from stock |
-| Children > Find | Exact system ID, or family name with date of birth, across all facilities; other facilities' records open read-only and each look-up is logged |
+| Session | Each planned child's sex and age on the session day. Vaccines needed against stock and the forecast (shortfalls flagged), the planned children in priority order; tick the doses given and save, or mark "did not attend". Saving records the doses on the child's passport and issues them from stock |
+| Children > Find | Results and the recently registered list show sex and age. Exact system ID, or family name with date of birth, across all facilities; other facilities' records open read-only and each look-up is logged |
 | Children > Register | Register a child; a likely duplicate (same family name and date of birth here) is shown before a new record is created |
-| Child record | Details, record a due dose, every scheduled dose with its state, the history at any facility, and "Export FHIR record" (a FHIR R4 Bundle file) |
+| Child record | "About the child": sex, age (days, weeks, months or years), age group, date of birth, caregiver, where and when registered, doses received; "Edit details"; record a due dose, every scheduled dose with its state, the history at any facility, and "Export FHIR record" (a FHIR R4 Bundle file) |
+| Edit child details | Correct the name, sex, date of birth or caregiver of a child registered at this facility. Saved changes are audited. A new date of birth is refused if a recorded dose would fall outside its age window. Records from other facilities cannot be edited |
 | Vaccine schedule | The schedule the system uses |
 
 ### Facility manager
@@ -73,6 +74,55 @@ Everything the health worker has, plus: acknowledge an alert (Stock > Stock), ch
 | Users | Create accounts (no self-registration), deactivate or reactivate, set a new password (also clears a lockout); an administrator cannot deactivate their own account |
 | Facilities | List and add facilities |
 | Schedule | Edit each dose's recommended, minimum and maximum age and minimum interval; the order minimum <= recommended <= maximum is enforced |
+
+## 2b. Signing in, switching accounts and demonstration mode (D-46)
+
+**Real use.** Every person signs in with their own username and password, created by the administrator. Sign out with the arrow icon (bottom of the side menu on a computer, top right on a phone); the next person then signs in with their own details. Signing out clears the session cookie and every screen in memory, so reloading the page does not sign the previous person back in, and the next person never sees the previous person's data.
+
+**Demonstration mode.** For a presentation on the local demonstration installation only, `python3 scripts/dev.py run` turns on an account picker under the sign-in form, clearly labelled "Demonstration only":
+
+1. Choose a facility.
+2. Choose "Sign in as health worker", "Sign in as facility manager" or "Sign in as system administrator". No password is needed.
+3. Every screen then shows a "Demonstration mode" banner (on a phone: "Demo: <username>") with **Switch account**, which signs out and returns to the picker.
+
+Safeguards: the picker exists only when the server is started with demonstration mode on; Django refuses to start in that mode unless it serves only this computer (`localhost`, `127.0.0.1`); only the demo accounts created by `demo-users` are offered; every demo sign-in is in the audit log. To demonstrate the real sign-in only, start with `python3 scripts/dev.py run --no-demo`.
+
+## 2c. Screenshot catalogue (full pages, desktop and phone)
+
+Files `docs/evidence/F-UI-<nn>-<name>_desktop.png` and `_phone.png`, taken by `dev.py e2e --screenshots` on 2026-11-11 from the browser tests on synthetic data.
+
+| ID | Screen | Role |
+|---|---|---|
+| F-UI-01 | Sign-in, real use (no picker) | anyone |
+| F-UI-02 | Sign-in with the demonstration picker | anyone |
+| F-UI-03 | Overview | health worker |
+| F-UI-04 | Stock and alerts | health worker |
+| F-UI-05 | Forecast chart | health worker |
+| F-UI-06 | Forecast table | health worker |
+| F-UI-07 | Ledger | health worker |
+| F-UI-08 | Stock settings | facility manager |
+| F-UI-09 | Stock policy edit | facility manager |
+| F-UI-10 | Defaulters with "Who is overdue" | facility manager |
+| F-UI-11 | Defaulters filtered by sex and age group | facility manager |
+| F-UI-12 | New session | facility manager |
+| F-UI-13 | Session plan and attendance | facility manager |
+| F-UI-14 | Children: find and recently registered | health worker |
+| F-UI-15 | Register a child | health worker |
+| F-UI-16 | Child record with "About the child" | health worker |
+| F-UI-17 | Edit child details | health worker |
+| F-UI-18 | Record from another facility (read-only) | health worker |
+| F-UI-19 | Vaccine schedule | facility manager |
+| F-UI-20 | Import data, dry-run result | facility manager |
+| F-UI-21 | Audit log | facility manager |
+| F-UI-22 | More | facility manager |
+| F-UI-23 | System | administrator |
+| F-UI-24 | Users | administrator |
+| F-UI-25 | Create a user | administrator |
+| F-UI-26 | New password | administrator |
+| F-UI-27 | Facilities | administrator |
+| F-UI-28 | Add a facility | administrator |
+| F-UI-29 | Schedule | administrator |
+| F-UI-30 | Edit a scheduled dose | administrator |
 
 ## 2a. Import data (facility manager)
 
@@ -144,7 +194,7 @@ Evaluation without the app: `python3 scripts/dev.py evaluate` (baseline backtest
 | Command | What it checks | Latest result (commit `855d49a`) |
 |---|---|---|
 | `dev.py test all` | Unit, integration and security tests | 333 passed |
-| `dev.py e2e --screenshots` | Browser tests TC-S-01 to TC-S-07 on desktop and phone widths, on a separate database; saves F-UI screenshots | 14 passed |
+| `dev.py e2e --screenshots` | Browser tests TC-S-01 to TC-S-10 on desktop and phone widths, on a separate database: every page and every edit screen of the three roles; saves full-page F-UI screenshots | 20 passed (2026-11-11) |
 | `dev.py walkthrough` | Latency of 8 endpoints, accuracy against truth and the defaulter oracle, import cleaning | 8 of 8 checks 100%; max p95 373 ms |
 | `dev.py evaluate` | Baseline backtest and alert accuracy | doc 05 section 6 |
 
@@ -154,7 +204,7 @@ Before: `db-up`, `forecasts`, `run`; open http://localhost:5173 on the laptop an
 
 | # | Who | Show | Point to make |
 |---|---|---|---|
-| 1 | - | Sign in with a wrong password | Generic refusal; lockout after 5 failures |
+| 1 | - | Sign in with a wrong password; point to the "Demonstration only" picker | Generic refusal; lockout after 5 failures; in real use people type their own details and the picker does not exist |
 | 2 | Health worker (`hcw-syn-d01`) | Overview | One screen answers "what needs attention today" |
 | 3 | Health worker | Stock > Forecast, BCG; switch to Table | Forecast with interval, model and its measured accuracy; table alternative for every chart |
 | 4 | Health worker | Stock > Stock alerts | Alert in words with the projected week; colour is never the only signal |
@@ -167,4 +217,21 @@ Before: `db-up`, `forecasts`, `run`; open http://localhost:5173 on the laptop an
 | 11 | Administrator (`admin`) | System, Users | Accounts managed centrally; no clinical data visible |
 | 12 | - | Turn off Wi-Fi on the phone | Offline banner; data stays readable, saving is blocked |
 
-Backup: the screenshots F-UI-01 to F-UI-11 (desktop and phone) in `docs/evidence/`.
+Backup: the full-page screenshots F-UI-01 to F-UI-30 (desktop and phone) in `docs/evidence/`, listed in section 2c.
+
+## 7. Outbreaks: what the system does and does not do
+
+The system has no outbreak feature. Outbreak response campaigns (SIAs) are out of scope (doc 10 section 1), and it receives no disease surveillance data. During an outbreak of a vaccine-preventable disease (for example measles), the routine features still help, as follows.
+
+| Need during an outbreak | What the system does now | Limit |
+|---|---|---|
+| Find unprotected children | Outreach > Defaulters lists every child under 2 with an overdue dose, ranked by most missed doses and then nearest to the age limit (BR-04). Children missing MR-1 or MR-2 are on it | Ranks all antigens together; it cannot be filtered to one vaccine or raise one antigen's priority |
+| Reach them | A facility manager creates extra outreach sessions and generates plans from the ranked list; the plan shows vaccines needed against stock | Under-2s only; older children in a catch-up campaign cannot be recorded |
+| Check a child's status at any facility | Health passport: an authorised worker at any facility finds the child by system ID and sees, or exports (FHIR R4), the full record | Read-only for other facilities, by design |
+| Stock for a sudden rise in demand | Every dose given is recorded as stock issued. The nightly job rebuilds the series, re-forecasts and re-checks stock against current balance, so falling stock raises an alert at the next run | Forecasts follow the rise only after it appears in the data, over several weeks; nothing tells the model an outbreak has started |
+| Be more cautious with stock | Facility manager raises the safety buffer or shortens the delivery cycle in the stock settings, which makes alerts trigger earlier | Manual; applies to that vaccine and facility until changed back |
+| Record extra deliveries | Import data or a receipt transaction adds emergency stock to the ledger | None |
+
+**Not tested.** The synthetic data contains supply disruptions (OPV 2022, MR 2024), not demand surges, so forecast and alert accuracy during an outbreak has not been measured.
+
+**Possible extensions (each needs a logged scope decision first).** A manual demand adjustment per vaccine for a set number of weeks, added to the forecast before the alert rule; a defaulter filter by antigen; campaign doses as a separate record kind so they do not distort routine forecasts. These are candidates for the thesis's future-work section.

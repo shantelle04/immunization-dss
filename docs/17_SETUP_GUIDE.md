@@ -41,10 +41,10 @@ These are created on each computer and are never uploaded to GitHub:
 | 5 | `python3 scripts/dev.py simulate` | Generates the synthetic dataset from seed 42 (12 fictional facilities, 35,525 children, 2019 to 2025), checks it with 11 quality checks, and saves fingerprints of every file. The same seed gives byte-identical files on any computer | 2 to 3 minutes |
 | 6 | `python3 scripts/dev.py load`, then `python3 scripts/dev.py demo-users` | Loads the clinic records into the database (never the hidden "truth" files used for evaluation), then creates an administrator and one manager and one health worker per facility. Passwords go to `.demo_credentials.txt` on that computer only | about 1 minute |
 | 7 | **Either** `python3 scripts/dev.py forecasts --results <folder>/backtest` (trained models, see section 4) **or** `python3 scripts/dev.py forecasts` (simple baseline methods) | Builds the weekly vaccine-use series from the database, stores a 4-week forecast for every vaccine at every facility, and raises or clears stock-out alerts. This is what fills the Forecast tab | seconds |
-| 8 | `python3 scripts/dev.py run` | Starts the backend and the app. Open http://localhost:5173 and sign in with an account from `.demo_credentials.txt` (managers `fm-syn-...`, health workers `hcw-syn-...`, `admin`) | stays running; Ctrl+C stops |
+| 8 | `python3 scripts/dev.py run` | Starts the backend and the app. Open http://localhost:5173 and sign in with an account from `.demo_credentials.txt` (managers `fm-syn-...`, health workers `hcw-syn-...`, `admin`), or, for a demonstration, pick a facility and role in the "Demonstration only" panel (doc 14 section 2b). `run --no-demo` hides the panel | stays running; Ctrl+C stops |
 | 9 | `python3 scripts/dev.py doctor` | Runs 17 checks, from the installed tools to the stored forecasts, and prints the command that fixes anything missing. Run it whenever something looks wrong | seconds |
 
-Optional checks: `python3 scripts/dev.py test` runs all automated tests (343 should pass); `python3 scripts/dev.py walkthrough` measures speed and checks the system's answers against the hidden truth (all accuracy checks should be 100%).
+Optional checks: `python3 scripts/dev.py test` runs all automated tests (393 should pass); `python3 scripts/dev.py walkthrough` measures speed and checks the system's answers against the hidden truth (all accuracy checks should be 100%).
 
 The clinical date is fixed at 29 December 2025, the last day of the dataset, so overdue doses and alerts look as they would on that day.
 
@@ -58,6 +58,7 @@ The latest reviewed version is on the `main` branch; work in progress is on `pha
 | Already cloned, get the latest | `git checkout main`, then `git pull` |
 | After pulling | `python3 scripts/dev.py setup` (installs any new library versions), then `python3 scripts/dev.py doctor` |
 | If `doctor` reports pending migrations | `cd backend`, then `python manage.py migrate` (run it yourself; it is never forced) |
+| After the 2026-11-11 update (demonstration picker) | `python manage.py migrate` as above, then `python3 scripts/dev.py demo-users` once so the existing demo accounts appear in the picker (passwords already in `.demo_credentials.txt` are kept) |
 | If the data or training series changed | `python3 scripts/dev.py simulate`, `python3 scripts/dev.py load --replace`, `python3 scripts/dev.py forecasts` (or with `--results`) |
 
 `git pull` never touches `.env`, the generated data, the database or `.demo_credentials.txt`, because they are not in the repository.
@@ -108,4 +109,6 @@ In the app, signed in as a manager or health worker: the Overview shows counts o
 | Database connection refused | Docker or the database container is not running | Start Docker Desktop, then `python3 scripts/dev.py db-up` |
 | Import refused: trained on a different series | The dataset differs from the one the models were trained on | Run `doctor`; regenerate with `simulate`, reload with `load --replace`, or retrain on Colab |
 | Sign-in fails with demo passwords from another computer | Passwords are created per computer | Use `.demo_credentials.txt` on this computer, or `python3 scripts/dev.py demo-users --reset` |
+| No "Demonstration only" panel on the sign-in page | Started without demonstration mode, or demo accounts not flagged | Start with `python3 scripts/dev.py run`; run `python3 scripts/dev.py demo-users` once |
+| Signed out but cannot sign in as someone else | An older version kept the session cookie when the access token had expired | Pull the latest `main`; sign-out now always clears the session |
 | Every child looks months overdue | Clinical date is today's real date | Start with `python3 scripts/dev.py run`, or set `IMMDSS_TODAY=2025-12-29` in `.env` |

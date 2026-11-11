@@ -2,7 +2,7 @@
 title: "Project Progress Report"
 subtitle: "A Web-Based Decision Support System for Healthcare Workers to Address Childhood Immunization Gaps through Predictive Analytics and Smart Scheduling"
 author: "Muthomi, Shantelle Nkatha (168873), BBIT 4D. Supervisor: Mr. Titus Tunduny"
-date: "Status as of 2 November 2026"
+date: "Status as of 11 November 2026"
 ---
 
 # 1. Summary
@@ -230,7 +230,7 @@ The full log is in my repository (doc 15), and all results by stage are in doc 1
 - Built the first screens (React): login, inventory, scheduling, child records and user administration. 6 frontend tests pass.
 - Loaded the synthetic data into the database (60 seconds) and ran a scripted walkthrough: stock balances matched for 84 of 84 facility and vaccine pairs, child histories for 200 of 200 sampled children, and the CSV import caught 119 of 120 planted errors while rejecting 0 of 697 clean rows. The slowest page request took 326 ms (95th percentile).
 
-**Pending:** the gate review and tagging the version as `p1`. Screenshots of every screen are done (F-UI-01 to F-UI-11, desktop and phone).
+**Pending:** the gate review and tagging the version as `p1`. Screenshots of every screen are done (now F-UI-01 to F-UI-30, desktop and phone).
 
 ## Phase 4: Model training and Prototype 2
 
@@ -271,7 +271,13 @@ The full log is in my repository (doc 15), and all results by stage are in doc 1
 
 **What this phase is:** repeated evaluate, fix, re-evaluate cycles (proposal 3.2.3), plus unit, integration, security and performance testing (dashboards loading in under 3 seconds).
 
-**Pending:** all.
+**Done (cycle 1, supervisor feedback of 11 November 2026):**
+
+- Added a section describing each child: sex, age, age group, date of birth, caregiver and registration, with sex and age also on the child lists, the defaulter list and session plans, a breakdown of defaulters by sex and age group with filters, and a page to correct a child's details (D-47).
+- Fixed sign-out so the next person can always sign in (it failed to end the session once the short access token had expired), and added a demonstration-only account picker with a "Switch account" button, which cannot run on a real server (D-46).
+- 393 automated tests and 20 browser tests on desktop and phone pass; full-page screenshots of all 30 screens (F-UI-01 to F-UI-30).
+
+**Pending:** further refinement cycles, the load test and tag `p3`.
 
 ## Phase 6: User acceptance testing and final system
 

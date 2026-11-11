@@ -195,3 +195,28 @@ Values in the config without an explicit label (they are modelling choices and s
 1. How do you know the simulator is realistic? (Calibration targets and validation checks in doc 04 section 5; KDHS reproduction check.)
 2. Is it circular to test models on simulated data? (Yes, partly; mitigations and the limitation statement in doc 07 R-02.)
 3. What does 95% accuracy mean in your system? (D-07.)
+
+## Outbreaks (2026-11-03)
+
+**Likely question.** What happens if there is an outbreak, for example of measles?
+
+**Answer in short.** The system does not detect or model outbreaks; campaigns are out of scope. It supports the response through its routine features: the defaulter list finds under-2s missing MR doses, extra outreach sessions can be planned from it, any facility can check a child's record, and the nightly stock check reacts to stock falling as more doses are given. The facility manager can raise the safety buffer to get earlier alerts. Forecasts adjust only after the surge appears in the data, and accuracy during a surge was not tested because the simulation has supply disruptions, not demand surges. Full table: doc 14 section 7.
+
+**Follow-ups to expect**
+1. Why not include outbreaks? (Scope: SIAs and surveillance feeds are outside the proposal; adding them needs a scope decision.)
+2. How fast do forecasts react? (Moving average within 4 weeks; GRU and SARIMA from the next nightly run, but they weight the long history, so they lag a sudden jump. Not measured.)
+3. What would you add? (A manual demand adjustment per vaccine, an antigen filter on the defaulter list, campaign doses as a separate record kind.)
+
+## Supervisor feedback: describing the child and switching accounts (2026-11-11)
+
+**What was built.** (1) Every child record now opens with "About the child": sex, age, age group, date of birth, caregiver, where and when registered, and doses received. Sex and age also appear on the child lists, the defaulter list and the session plan, and the defaulter list starts with "Who is overdue", a breakdown by sex and age group, with filters. A child's details can be corrected on an "Edit child details" page. (2) Sign-out now always ends the session, even after the short access token has expired, so another person can sign in straight away. (3) For demonstrations only, the sign-in page can show a panel to pick a facility and role without a password, with a banner and a "Switch account" button on every screen.
+
+**Why it is safe.** The picker is off unless the server is started in demonstration mode, Django refuses that mode on any address other than this computer, only demo accounts are offered, and each demo sign-in is audited. In real use people type their own username and password. Editing is limited to the registering facility, audited, and a date-of-birth change that would make a recorded dose invalid is refused.
+
+**Evidence.** D-46, D-47; `backend/tests/test_demo_and_child_details.py`; browser tests TC-S-01 to TC-S-10 (20 passed, desktop and phone); screenshots F-UI-01 to F-UI-30.
+
+**Likely questions**
+1. Is a password-free sign-in a security hole? (Only in demonstration mode, which cannot start on a real server address and offers only demo accounts; tested.)
+2. Why age groups 0 to 5, 6 to 11, 12 to 17, 18 to 23 months? (They follow the schedule's contacts: infant doses, measles at 9 months, the second measles dose at 18 months, and the under-2 limit of the defaulter list.)
+3. Can a health worker change a child's sex or date of birth? (Yes, at the registering facility only; every change is in the audit log, and a date of birth that would invalidate a recorded dose is refused.)
+4. Why is age calculated on 29 December 2025? (The clinical date of the synthetic data, D-32, so age agrees with the due and overdue doses on the same screen.)

@@ -115,15 +115,23 @@ The GRU is used for 80 series and SARIMA for 4 (selection rule D-21). The traini
 
 **Improved.** Two defects found by the browser tests and fixed: the session was lost on page reload when two refreshes raced, and the test port's origin was not trusted for the CSRF check.
 
+### 2.9 Refinement cycle 1: supervisor feedback (Phase 5)
+
+**Done.** Child description (sex, age, age group) on the record, lists, defaulter list and session plan; defaulters by sex and age group with filters; an edit page for child details (D-47). Sign-out that always ends the session, and a demonstration-only account picker with "Switch account" (D-46).
+
+**Result.** 307 backend tests (36 more than before), 22 frontend tests (9 more), 20 browser tests covering every page and edit screen of all three roles on desktop and phone; screenshots F-UI-01 to F-UI-30.
+
+**Improved.** Three defects fixed, each now covered by a test: sign-out did not end the session once the access token had expired, so a reload signed the previous user back in (found while tracing the feedback); data cached for one account stayed in memory after switching to another (found in review); a failed sign-out request was not handled (found by a new frontend test).
+
 ## 3. Quality and testing
 
 | Level | Count | Latest result |
 |---|---|---|
 | Analytics unit tests | 57 | pass |
-| Backend unit, integration and security tests (including every endpoint against every role) | 269 | pass |
-| Runner tests | 5 | pass |
-| Frontend tests | 12 | pass |
-| Browser tests (desktop and phone) | 14 | pass |
+| Backend unit, integration and security tests (including every endpoint against every role) | 307 | pass |
+| Runner tests | 7 | pass |
+| Frontend tests | 22 | pass |
+| Browser tests (desktop and phone) | 20 | pass |
 | Walkthrough accuracy checks | 8 | 100% |
 
 ## 4. What remains
