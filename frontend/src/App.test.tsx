@@ -1,10 +1,11 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, onlineManager } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { AppRoutes, Providers, ROUTER_FUTURE } from "./App";
 import { api, setAccessToken } from "./api";
 import { chartPoints } from "./pages/ForecastChart";
 import { templateCsv } from "./pages/FacilityPages";
+import { ageBand, ageInFull, sexLabel } from "./ui";
 
 type Handler = (init: RequestInit) => { status: number; body?: unknown };
 let routes: Record<string, Handler>;
@@ -19,6 +20,8 @@ function json(status: number, body?: unknown): Response {
 }
 
 beforeEach(() => {
+  jest.restoreAllMocks(); // the offline test stubs navigator.onLine
+  onlineManager.setOnline(true);
   calls = [];
   setAccessToken(null);
   routes = { "POST /api/v1/auth/refresh": () => ({ status: 401, body: { detail: "Not signed in." } }) };
@@ -313,4 +316,166 @@ test("import templates start with the exact columns the server expects and use t
   expect(templateCsv("stock", "SYN-D01").split("\n")[0]).toBe(
     "date,facility_code,antigen_code,lot_number,kind,quantity_doses",
   );
+});
+
+const OTHER_FACILITY = { code: "B", name: "Beta Health Centre", level: "health_centre" };
+const DEMO_ACCOUNTS = [
+  { username: "admin", role: "system_admin", facility: null },
+  HCW,
+  FM,
+  { username: "hcw-b", role: "healthcare_worker", facility: OTHER_FACILITY },
+];
+
+test("age is stated the way a clinic card states it, and sex in words", () => {
+  expect(ageInFull(3)).toBe("3 days");
+  expect(ageInFull(20)).toBe("2 weeks");
+  expect(ageInFull(211)).toBe("6 months");
+  expect(ageInFull(800)).toBe("2 years 2 months");
+  expect(ageInFull(731)).toBe("2 years");
+  expect(ageBand(150).key).toBe("0-5");
+  expect(ageBand(400).key).toBe("12-17");
+  expect(ageBand(729).key).toBe("18-23");
+  expect(sexLabel("F")).toBe("Female");
+  expect(sexLabel("M")).toBe("Male");
+});
+
+test("no account picker appears unless the server offers demonstration accounts", async () => {
+  renderAt("/login");
+  expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  await waitFor(() => expect(calls).toContain("GET /api/v1/auth/demo"));
+  expect(screen.queryByText("Demonstration only")).not.toBeInTheDocument();
+});
+
+test("in demonstration mode a role is picked per facility, labelled as demo only", async () => {
+  routes["GET /api/v1/auth/demo"] = () => ({ status: 200, body: { accounts: DEMO_ACCOUNTS } });
+  let chosen = "";
+  routes["POST /api/v1/auth/demo"] = (init) => {
+    chosen = JSON.parse(String(init.body)).username;
+    return { status: 200, body: { access: "token", user: FM } };
+  };
+  signedIn(null);
+  routes["POST /api/v1/auth/refresh"] = () => ({ status: 401 });
+  renderAt("/login");
+  expect(await screen.findByText("Demonstration only")).toBeInTheDocument();
+  expect(screen.getByText(/In real use every person signs in with their own username and password/)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: /Sign in as facility manager/ }));
+  expect(await screen.findByText(/Demonstration mode: signed in as fm-a/)).toBeInTheDocument();
+  expect(chosen).toBe("fm-a");
+});
+
+test("switching account signs out and never shows the previous account's cached data", async () => {
+  routes["GET /api/v1/auth/demo"] = () => ({ status: 200, body: { accounts: DEMO_ACCOUNTS } });
+  routes["POST /api/v1/auth/logout"] = () => ({ status: 204 });
+  signedIn(HCW);
+  renderAt("/overview");
+  expect(await screen.findByRole("link", { name: "Defaulters: 9" })).toBeInTheDocument();
+  routes["POST /api/v1/auth/refresh"] = () => ({ status: 401 });
+  fireEvent.click(await screen.findByRole("button", { name: "Switch account" }));
+  expect(await screen.findByText("Demonstration only")).toBeInTheDocument();
+  expect(calls).toContain("POST /api/v1/auth/logout");
+  routes["GET /api/v1/dashboard"] = () => ({ status: 200, body: { ...OVERVIEW, defaulters: 4 } });
+  routes["POST /api/v1/auth/demo"] = () => ({
+    status: 200,
+    body: { access: "token", user: { ...HCW, username: "hcw-b", facility: OTHER_FACILITY } },
+  });
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Facility" }));
+  fireEvent.click(await screen.findByRole("option", { name: /Beta Health Centre/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Sign in as health worker/ }));
+  expect(await screen.findByRole("link", { name: "Defaulters: 4" })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Defaulters: 9" })).not.toBeInTheDocument();
+});
+
+test("signing out still ends the session in the browser when the server call fails", async () => {
+  signedIn(HCW);
+  routes["POST /api/v1/auth/logout"] = () => {
+    throw new Error("network down");
+  };
+  renderAt("/overview");
+  const out = await screen.findAllByRole("button", { name: "Sign out" });
+  routes["POST /api/v1/auth/refresh"] = () => ({ status: 401 });
+  fireEvent.click(out[0]);
+  expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+});
+
+const CHILD = {
+  id: "c1",
+  system_id: "IMM-A-00001",
+  given_name: "Amani",
+  family_name: "Otieno",
+  sex: "F",
+  date_of_birth: "2025-06-01",
+  caregiver_name: "Rehema Otieno",
+  registration_facility: "A",
+  registered_on: "2025-06-01",
+  is_synthetic: true,
+  age_days: 211,
+};
+
+test("the child record describes the child: sex, age and age group on the clinical date", async () => {
+  signedIn(HCW);
+  routes["GET /api/v1/children/c1/immunizations"] = () => ({
+    status: 200,
+    body: { as_of: "2025-12-29", read_only: false, child: CHILD, history: [], doses: [], schedule: [] },
+  });
+  renderAt("/children/c1");
+  const details = await screen.findByLabelText("Child details");
+  expect(within(details).getByText("Female")).toBeInTheDocument();
+  expect(within(details).getByText("6 months")).toBeInTheDocument();
+  expect(within(details).getByText("6 to 11 months")).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Edit details" })).toHaveAttribute("href", "/children/c1/edit");
+});
+
+test("editing a child sends only the changed fields and shows the server's refusal", async () => {
+  signedIn(HCW);
+  routes["GET /api/v1/children/c1"] = () => ({ status: 200, body: { ...CHILD, read_only: false } });
+  let sent: unknown = null;
+  routes["PATCH /api/v1/children/c1"] = (init) => {
+    sent = JSON.parse(String(init.body));
+    return { status: 400, body: { date_of_birth: ["With this date of birth, OPV-0 would fall outside its age window."] } };
+  };
+  renderAt("/children/c1/edit");
+  const save = await screen.findByRole("button", { name: "Save changes" });
+  expect(save).toBeDisabled();
+  fireEvent.change(screen.getByLabelText(/Caregiver name/), { target: { value: "Juma Otieno" } });
+  fireEvent.click(save);
+  expect(await screen.findByText(/OPV-0 would fall outside its age window/)).toBeInTheDocument();
+  expect(sent).toEqual({ caregiver_name: "Juma Otieno" });
+});
+
+test("a record from another facility cannot be edited", async () => {
+  signedIn(HCW);
+  routes["GET /api/v1/children/c1"] = () => ({ status: 200, body: { ...CHILD, registration_facility: "B", read_only: true } });
+  renderAt("/children/c1/edit");
+  expect(await screen.findByText(/Only that facility can correct the details/)).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Save changes" })).not.toBeInTheDocument();
+});
+
+test("defaulters are described by sex and age group and can be filtered by both", async () => {
+  signedIn(FM);
+  const row = (n: number, sex: string, age_days: number) => ({
+    rank: n,
+    child_id: `c${n}`,
+    system_id: `IMM-A-0000${n}`,
+    name: `Child ${n}`,
+    sex,
+    age_days,
+    overdue_count: 1,
+    overdue: ["MR-1"],
+    days_to_nearest_max_age: 100,
+  });
+  routes["GET /api/v1/defaulters"] = () => ({
+    status: 200,
+    body: { as_of: "2025-12-29", count: 3, results: [row(1, "F", 300), row(2, "M", 300), row(3, "F", 600)] },
+  });
+  routes["GET /api/v1/sessions"] = () => ({ status: 200, body: { results: [] } });
+  renderAt("/scheduling");
+  const bySex = await screen.findByRole("table", { name: "Defaulters by sex" });
+  expect(within(bySex).getByRole("row", { name: /Female 2 67%/ })).toBeInTheDocument();
+  const byAge = screen.getByRole("table", { name: "Defaulters by age group" });
+  expect(within(byAge).getByRole("row", { name: /6 to 11 months 2 67% 1 \/ 1/ })).toBeInTheDocument();
+  fireEvent.mouseDown(screen.getByRole("combobox", { name: "Sex" }));
+  fireEvent.click(await screen.findByRole("option", { name: "Male" }));
+  expect(await screen.findByText(/1 of 3 shown/)).toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "2. Child 2" })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "1. Child 1" })).not.toBeInTheDocument();
 });

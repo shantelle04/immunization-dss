@@ -13,17 +13,21 @@ from apps.passport.models import Child
 HCW, FM, SA, ANON = "hcw_a", "fm_a", "sa", "anonymous"
 CLINICAL = {HCW, FM}
 PUBLIC = "public"
+DEMO_OFF = "demo_off"  # demonstration sign-in (D-46): switched off in tests, so 404 for every caller
 
 # (route name, method): roles allowed. Everyone else must be refused before any business logic.
 MATRIX = {
     ("auth-login", "post"): PUBLIC,
     ("auth-refresh", "post"): PUBLIC,
-    ("auth-logout", "post"): {HCW, FM, SA},
+    ("auth-logout", "post"): PUBLIC,
+    ("auth-demo", "get"): DEMO_OFF,
+    ("auth-demo", "post"): DEMO_OFF,
     ("auth-me", "get"): {HCW, FM, SA},
     ("children", "get"): CLINICAL,
     ("children", "post"): CLINICAL,
     ("children-search", "get"): CLINICAL,
     ("child-detail", "get"): CLINICAL,
+    ("child-detail", "patch"): CLINICAL,
     ("child-immunizations", "get"): CLINICAL,
     ("child-immunizations", "post"): CLINICAL,
     ("schedule", "get"): CLINICAL,
@@ -88,7 +92,9 @@ def test_role_access(name, method, role, users, child_a):
     client = client_for(None if role == ANON else users[role][0])
     response = getattr(client, method)(_url(pattern, child_a), {}, format="json")
     allowed = MATRIX[(name, method)]
-    if allowed == PUBLIC:
+    if allowed == DEMO_OFF:
+        assert response.status_code == 404
+    elif allowed == PUBLIC:
         assert response.status_code not in (403, 404, 405)
     elif role in allowed:
         assert response.status_code not in (401, 403), f"{role} should reach {name} {method}"
